@@ -463,7 +463,7 @@ function createTrials(yokedData) {
 	  createTrials(yokedData);
 	  jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
   } else if (condition=="passive") {
-  	Papa.parse("http://sapir.psych.wisc.edu/~zettersten/experiments/act/version1/data/activeWord_"+yoked_id+".csv", {
+  	Papa.parse("https://sapir.psych.wisc.edu/~zettersten/experiments/act/version1/data/activeWord_"+yoked_id+".csv", {
   		download: true,
   		dynamicTyping: true,
 		header: true,

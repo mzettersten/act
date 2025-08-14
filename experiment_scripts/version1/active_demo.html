@@ -32,7 +32,7 @@ $('body,html').addClass('stop-scrolling');
 //var subject_id = prompt("Enter subject id", "test");
 var subject_id = "test";
 //MZ edit for demo
-var condition = prompt("Condition (active or passive)","active");
+var condition = prompt("Enter the condition you would like to demo. Please type 'active' or 'passive'.","active");
 //MZ edit for demo
 //var input = prompt("Enter input type (touch or click)","touch");
 var input = "click";
@@ -463,7 +463,7 @@ function createTrials(yokedData) {
 	  createTrials(yokedData);
 	  jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
   } else if (condition=="passive") {
-  	console.log("made it here")
+  	//MZ: edit here for demo presentation (used to link to Sapir server)
   	Papa.parse("https://mzettersten.github.io/act/experiment_scripts/version1/data/activeWord_"+yoked_id+".csv", {
   		download: true,
   		dynamicTyping: true,

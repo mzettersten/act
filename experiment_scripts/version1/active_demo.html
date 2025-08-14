@@ -463,6 +463,7 @@ function createTrials(yokedData) {
 	  createTrials(yokedData);
 	  jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
   } else if (condition=="passive") {
+  	console.log("made it here")
   	Papa.parse("https://mzettersten.github.io/act/experiment_scripts/act/version1/data/activeWord_"+yoked_id+".csv", {
   		download: true,
   		dynamicTyping: true,

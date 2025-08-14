@@ -1,0 +1,498 @@
+<!doctype html>
+<html>
+
+<head>
+  	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" >
+	<script src="js/jquery.min.js"></script>
+	<script src="js/jquery-ui.min.js"></script>
+  	<script src="js/snap.svg-min.js"></script> 
+	<script src="js/papaparse.min.js"></script> 
+  	<script src="js/jspsych.js"></script>
+	<script src="jspsych-active-prompt.js"></script>
+  	<script src="jspsych-activeWord-learning.js"></script>
+	<script src="jspsych-activeWord-test.js"></script>
+	<script src="jspsych-activeWord-showImage.js"></script>
+  	<script src="plugins/jspsych-button-response.js"></script>
+    <link rel="stylesheet" href="css/jspsych.css"></link>
+    <link rel="stylesheet" href="css/activeTouch.css"></link>
+</head>
+
+<body>
+  <div id="jspsych-target"></div>
+</body>
+
+<script>
+//$('body,html').addClass('stop-scrolling');
+$('body,html').addClass('stop-scrolling');
+//$('body').bind('touchmove', function(e){e.preventDefault()})
+
+
+//Enter subject id
+var subject_id = prompt("Enter subject id", "test");
+var condition = prompt("Condition (active or passive)","active");
+var input = prompt("Enter input type (touch or click)","touch");
+
+var inputType="";
+if (input=="touch") {
+	inputType="touch";
+} else {
+	inputType="click";
+}
+subject_id.replace(/[^A-Za-z0-9_]/g, "");
+condition.replace(/[^A-Za-z0-9_]/g, "");
+//var listNum = prompt("Enter list number (1 or 2)","1");
+if (condition=="passive") {
+	var yoked_id = prompt("Enter yoked subject id","test");
+};
+
+
+jsPsych.data.addProperties({
+	subject: subject_id,
+	condition: condition//,
+	//list: listNum
+});
+
+var stimExt="stims/"
+var imageStims=["1.png","2.png","3.png","4.png","5.png","6.png","7.png","8.png"];
+var audioStims=["beppo.wav","finna.wav","kita.wav","manu.wav","noopy.wav","roozer.wav","soma.wav","tesser.wav"];
+var audioStimNames=["norm_it_","norm_that_"];
+var audioTestStimNames=["norm_find_","norm_where_"];
+var allAudio =[];
+for (i = 0; i<audioStims.length; i++) {
+	for (j=0; j<audioStimNames.length; j++) {
+		allAudio.push(stimExt+audioStimNames[j]+audioStims[i]);
+	}
+	for (k=0; k<audioTestStimNames.length; k++) {
+		allAudio.push(stimExt+audioTestStimNames[k]+audioStims[i]);
+	}
+	
+};
+var audioAttention=["stims/bleep.wav","stims/trill.wav"];
+allAudio.concat(audioAttention);
+console.log(allAudio);
+
+function createTrials(yokedData) {
+	//stimuli
+	var sampleTrialStimNum=4;
+
+		
+	var whichAudioName = [0,0,0,0,1,1,1,1];
+	var whichAudioTestName = [0,0,0,0,1,1,1,1];
+
+
+	//randomize stimuli
+	var imageStimsShuffled=jsPsych.randomization.shuffle(imageStims);
+	var whichAudioNameShuffled=jsPsych.randomization.shuffle(whichAudioName);
+	var whichAudioTestNameShuffled=jsPsych.randomization.shuffle(whichAudioTestName);
+	var audioStimsShuffled = jsPsych.randomization.shuffle(audioStims);
+	var testAudioTrial=[];
+	var imageStimsTrial=[];
+	var audioStimsTrial=[];
+	for (i = 0; i < audioStims.length; i++) {
+		testAudioTrial[i]=stimExt+audioTestStimNames[whichAudioTestNameShuffled[i]]+audioStimsShuffled[i];
+		imageStimsTrial[i]=stimExt+imageStimsShuffled[i];
+		audioStimsTrial[i]=stimExt+audioStimNames[whichAudioNameShuffled[i]]+audioStimsShuffled[i];
+	};
+	
+	console.log(audioStimsTrial);
+	//put audio and labels together
+	var stims = [];
+	var stimMatrix1=[];
+	var stimMatrix2=[];
+	for (i = 0; i < sampleTrialStimNum; i++) {
+		stimMatrix1[i]=[imageStimsTrial[i],audioStimsTrial[i],testAudioTrial[i]];
+	};
+	for (i =0; i < sampleTrialStimNum; i++) {
+		stimMatrix2[i]=[imageStimsTrial[i+4],audioStimsTrial[i+4],testAudioTrial[i+4]];
+	};
+
+	//famStims
+	var famStimNum=4;
+	var famImageStims=["stims/bear.png", "stims/cow.png", "stims/penguin.png", "stims/pig.png"];
+	var famAudioOptions=[
+		["stims/norm_it_bear.wav","stims/norm_that_bear.wav"], 
+		["stims/norm_it_cow.wav","stims/norm_that_cow.wav"],
+		["stims/norm_it_penguin.wav","stims/norm_that_penguin.wav"],
+		["stims/norm_it_pig.wav","stims/norm_that_pig.wav"]
+	];
+	var famWhichAudio = [0,0,1,1];
+	
+	var famWhichAudioShuffled=jsPsych.randomization.shuffle(famWhichAudio);
+	
+	var famAudioStims=[];
+	
+	for (i = 0; i < famAudioOptions.length; i++) {
+		famAudioStims.push(famAudioOptions[i][famWhichAudioShuffled[i]])
+	};
+	
+
+	//famStims passive condition
+	famStimsYoked=[];
+	imageOrderFamYoked=[];
+	onsetWaitFam=[];
+	targetIndexFam=[];
+	if (condition=="passive") {
+		for (i=0; i<yokedData.length; i++) {
+			if (yokedData[i]["trialType"]=="fam-learning") {
+				famStimsYoked.push([
+					[yokedData[i]["image1"],yokedData[i]["image2"],yokedData[i]["image3"],yokedData[i]["image4"]],
+					[yokedData[i]["audio1"],yokedData[i]["audio2"],yokedData[i]["audio3"],yokedData[i]["audio4"]]
+				]);
+				onsetWaitFam.push(yokedData[i]["rt"]);
+				targetIndexFam.push(yokedData[i]["choice"]);
+			} else if (yokedData[i]["trialType"]=="show-fam-learning") {
+				imageOrderFamYoked.push([yokedData[i]["locationIndex1"],yokedData[i]["locationIndex2"],yokedData[i]["locationIndex3"],yokedData[i]["locationIndex4"]]);
+			};
+		};	
+	};
+
+	var imageOrder=[0,1,2,3];
+	var imageOrder1=jsPsych.randomization.shuffle(imageOrder);
+	var imageOrder2=jsPsych.randomization.shuffle(imageOrder);
+	var famImageOrder=jsPsych.randomization.shuffle(imageOrder);
+	//famList
+	var famSampleTrialNum=4;
+	var famSampleList=[];
+	var trialNum=1;
+	//which stims to use
+	if (condition=="active") {
+		var curFamStims=[[famImageStims,famAudioStims],[famImageStims,famAudioStims],[famImageStims,famAudioStims],[famImageStims,famAudioStims]];
+		var imageOrderFam=[]
+		for (i=0; i<famSampleTrialNum;i++) {
+			imageOrderFam.push(famImageOrder);
+		};
+	} else if (condition=="passive") {
+		var curFamStims=famStimsYoked;
+		var imageOrderFam=imageOrderFamYoked;
+	};
+
+	for (i = 0; i < famSampleTrialNum; i++) {
+		
+		var famAudioTrial=[];
+		for (j=0; j<famWhichAudioShuffled.length; j++) {
+			//console.log(curFamStims[i][1][j][famWhichAudioShuffled[j]]);
+			famAudioTrial.push(curFamStims[i][1][j][famWhichAudioShuffled[j]]);
+		}
+		//console.log(famAudioTrial);
+		var genOnsetWait = 500;
+		var trialShow = {
+			type: 'activeWord-showImage',
+			canvas_size: [1024,700],
+			imageOrder: imageOrderFam[i],
+			images: curFamStims[i][0],
+			input: inputType,
+			timing_post_trial: 0,
+			data: {trialNum: trialNum,trialType: "show-fam-learning", stimSet: 1},
+		};
+		var trial = {
+			type: 'activeWord-learning',
+			canvas_size: [1024,700],
+			condition: condition,
+			images: curFamStims[i][0],
+			audio: curFamStims[i][1],
+			onsetWait: genOnsetWait,
+			targetIndex: targetIndexFam[i],
+			input: inputType,
+			timing_post_trial: 0,
+			data: {trialNum: trialNum,trialType: "fam-learning", stimSet: 1},
+		};
+		
+		if (i==0) {
+
+			famSampleList.push(trialShow);
+		};
+		famSampleList.push(trial);
+		trialNum++;
+	};
+
+	//learning stims passive condition
+	var learnStimsYoked=[];
+	var imageOrderLearnYoked=[];
+	var onsetWaitLearn=[];
+	var targetIndexLearn=[];
+	if (condition=="passive") {
+		for (i=0; i<yokedData.length; i++) {
+			if (yokedData[i]["trialType"]=="learning") {
+				learnStimsYoked.push([
+					[yokedData[i]["image1"],yokedData[i]["image2"],yokedData[i]["image3"],yokedData[i]["image4"]],
+					[yokedData[i]["audio1"],yokedData[i]["audio2"],yokedData[i]["audio3"],yokedData[i]["audio4"]]
+				]); 
+				onsetWaitLearn.push(yokedData[i]["rt"]);
+				targetIndexLearn.push(yokedData[i]["choice"]);
+			} else if (yokedData[i]["trialType"]=="show-learning") {
+				imageOrderLearnYoked.push([yokedData[i]["locationIndex1"],yokedData[i]["locationIndex2"],yokedData[i]["locationIndex3"],yokedData[i]["locationIndex4"]]);
+			};
+		};	
+	};
+	//sample trials
+	var sampleTrialNum = 16;
+	var sampleList1=[];
+	var sampleList2=[];
+	//which stims to use
+	if (condition=="active") {
+		var curLearningStims=[];
+		var imageOrderLearn=[];
+		for (i=0; i<sampleTrialNum; i++) {
+			if (i < (sampleTrialNum/2)) {
+				curLearningStims.push([[stimMatrix1[0][0],stimMatrix1[1][0],stimMatrix1[2][0],stimMatrix1[3][0]],
+						[stimMatrix1[0][1],stimMatrix1[1][1],stimMatrix1[2][1],stimMatrix1[3][1]],1]);
+				imageOrderLearn.push(imageOrder1)
+			} else {
+				curLearningStims.push([[stimMatrix2[0][0],stimMatrix2[1][0],stimMatrix2[2][0],stimMatrix2[3][0]],
+							[stimMatrix2[0][1],stimMatrix2[1][1],stimMatrix2[2][1],stimMatrix2[3][1]],2]);
+				imageOrderLearn.push(imageOrder2);
+			};
+			
+		};
+		var onsetWait="NA";
+		var targetIndex="NA";
+	} else if (condition=="passive") {
+		var curLearningStims=learnStimsYoked;
+		var imageOrderLearn = imageOrderLearnYoked;
+		var onsetWait = onsetWaitLearn;
+		var targetIndex = targetIndexLearn;
+	};
+	
+
+
+			for (i = 0; i < sampleTrialNum; i++) {
+				var trialShow = {
+					type: 'activeWord-showImage',
+					canvas_size: [1024,700],
+					imageOrder: imageOrderLearn[i],
+					images: curLearningStims[i][0],
+					input: inputType,
+					timing_post_trial: 0,
+					data: {trialNum: trialNum,trialType: "show-learning", stimSet: curLearningStims[i][2]},
+				};
+				var trial = {
+					type: 'activeWord-learning',
+					canvas_size: [1024,700],
+					condition: condition,
+					images: curLearningStims[i][0],
+					audio: curLearningStims[i][1],
+					onsetWait: genOnsetWait,
+					targetIndex: targetIndex[i],
+					input: inputType,
+					timing_post_trial: 0,
+					data: {trialNum: trialNum,trialType: "learning", stimSet: curLearningStims[i][2]},
+				};
+				
+				if (i<8) {
+					if (i==0) {
+						sampleList1.push(trialShow);
+					};
+					sampleList1.push(trial);
+				} else {
+					if (i==8) {
+						sampleList2.push(trialShow);
+					};
+					sampleList2.push(trial)
+				}
+				
+			};
+
+			var famTestTrialList = [];
+			var testTrialList1 = [];
+			var testTrialList2 = [];
+
+			var handStim= {
+				type: 'button-response',
+				stimulus: 'stims/twohands.png',
+				choices: ['READY']
+			};
+			
+			famTestTrialList.push(handStim);
+			testTrialList1.push(handStim);
+			testTrialList2.push(handStim);
+
+			var stimMatrix1Shuffled = jsPsych.randomization.shuffle(stimMatrix1);
+			var stimMatrix2Shuffled = jsPsych.randomization.shuffle(stimMatrix2);
+
+			famPairs=[
+				["stims/cow.png", "stims/penguin.png","stims/norm_where_penguin.wav", "left","right",1],
+				["stims/pig.png", "stims/bear.png","stims/norm_find_pig.wav","left","right",1]
+			]
+
+			yokedPairs1=[
+				[stimMatrix1Shuffled[0],stimMatrix1Shuffled[1],"left","right",1],
+				[stimMatrix1Shuffled[1],stimMatrix1Shuffled[0],"left","right",1],
+				[stimMatrix1Shuffled[0],stimMatrix1Shuffled[1],"right","left",1],
+				[stimMatrix1Shuffled[1],stimMatrix1Shuffled[0],"right","left",1],
+				[stimMatrix1Shuffled[2],stimMatrix1Shuffled[3],"left","right",1],
+				[stimMatrix1Shuffled[3],stimMatrix1Shuffled[2],"left","right",1],
+				[stimMatrix1Shuffled[2],stimMatrix1Shuffled[3],"right","left",1],
+				[stimMatrix1Shuffled[3],stimMatrix1Shuffled[2],"right","left",1]	
+			];
+			
+			yokedPairs2=[
+				[stimMatrix2Shuffled[0],stimMatrix2Shuffled[1],"left","right",2],
+				[stimMatrix2Shuffled[1],stimMatrix2Shuffled[0],"left","right",2],
+				[stimMatrix2Shuffled[0],stimMatrix2Shuffled[1],"right","left",2],
+				[stimMatrix2Shuffled[1],stimMatrix2Shuffled[0],"right","left",2],
+				[stimMatrix2Shuffled[2],stimMatrix2Shuffled[3],"left","right",2],
+				[stimMatrix2Shuffled[3],stimMatrix2Shuffled[2],"left","right",2],
+				[stimMatrix2Shuffled[2],stimMatrix2Shuffled[3],"right","left",2],
+				[stimMatrix2Shuffled[3],stimMatrix2Shuffled[2],"right","left",2]
+			];
+
+			//test stims passive condition
+			var famTestStimsYoked=[];
+			if (condition=="passive") {
+				for (i=0; i<yokedData.length; i++) {
+					if (yokedData[i]["trialType"]=="familiar-test") {
+						famTestStimsYoked.push([yokedData[i]["targetImage"],yokedData[i]["foilImage"],yokedData[i]["testAudio"],yokedData[i]["targetLocation"],yokedData[i]["foilLocation"],yokedData[i]["stimSet"]]);
+					};
+				};	
+			};
+			//test trials
+			var famTestTrialNum = 4;
+			var curFamTestStims=[];
+			//which stims to use
+			if (condition=="active") {
+				famPairsShuffled=jsPsych.randomization.shuffle(famPairs);
+				for (i=0; i<famPairs.length; i++) {
+					curFamTestStims.push([famPairsShuffled[i][0],famPairsShuffled[i][1],famPairsShuffled[i][2],famPairsShuffled[i][3],famPairsShuffled[i][4],famPairsShuffled[i][5]]);
+		
+				};
+			} else if (condition=="passive") {
+				var curFamTestStims=famTestStimsYoked;
+			};
+
+			//familiar test trials
+			for (i = 0; i < famPairs.length; i++) {
+				var trial = {
+					type: 'activeWord-test',
+					canvas_size: [1024,700],
+					targetLocation: curFamTestStims[i][3],
+					foilLocation: curFamTestStims[i][4],
+					targetIm: curFamTestStims[i][0],
+					foilIm: curFamTestStims[i][1],
+					audioPrompt: curFamTestStims[i][2],
+					input: inputType,
+					timing_post_trial: 0,
+					data: {condition: condition,trialNum: i+1,trialType: "familiar-test", stimSet: curFamTestStims[i][5]}
+				};
+	
+				famTestTrialList.push(trial);
+			};
+
+			//test stims passive condition
+			var testStimsYoked=[];
+			if (condition=="passive") {
+				for (i=0; i<yokedData.length; i++) {
+					if (yokedData[i]["trialType"]=="test") {
+						testStimsYoked.push([yokedData[i]["targetImage"],yokedData[i]["foilImage"],yokedData[i]["testAudio"],yokedData[i]["targetLocation"],yokedData[i]["foilLocation"],yokedData[i]["stimSet"]]);
+					};
+				};	
+			};
+			//test trials
+			var testTrialNum = 16;
+			var curTestStims=[];
+			//which stims to use
+			if (condition=="active") {
+				yokedPairs1Shuffled=jsPsych.randomization.shuffle(yokedPairs1);
+				for (i=0; i<yokedPairs1.length; i++) {
+					curTestStims.push([yokedPairs1Shuffled[i][0][0],yokedPairs1Shuffled[i][1][0],yokedPairs1Shuffled[i][0][2],yokedPairs1Shuffled[i][2],yokedPairs1Shuffled[i][3],yokedPairs1Shuffled[i][4]]);
+				};
+				yokedPairs2Shuffled=jsPsych.randomization.shuffle(yokedPairs2);
+				for (i=0; i<yokedPairs2.length; i++) {
+					curTestStims.push([yokedPairs2Shuffled[i][0][0],yokedPairs2Shuffled[i][1][0],yokedPairs2Shuffled[i][0][2],yokedPairs2Shuffled[i][2],yokedPairs2Shuffled[i][3],yokedPairs2Shuffled[i][4]]);
+				};
+			} else if (condition=="passive") {
+				var curTestStims=testStimsYoked
+			};
+
+
+			//test trials
+			for (i = 0; i < curTestStims.length; i++) {
+				var trial = {
+					type: 'activeWord-test',
+					canvas_size: [1024,700],
+					targetLocation: curTestStims[i][3],
+					foilLocation: curTestStims[i][4],
+					targetIm: curTestStims[i][0],
+					foilIm: curTestStims[i][1],
+					audioPrompt: curTestStims[i][2],
+					input: inputType,
+					timing_post_trial: 0,
+					data: {condition: condition,trialNum: i+1,trialType: "test", stimSet: curTestStims[i][5]}
+				};
+				if (i<(curTestStims.length/2)) {
+					testTrialList1.push(trial);
+				} else {
+					testTrialList2.push(trial);
+				}
+				
+			};
+
+  
+			//combine learning and test trials
+
+			fam = famSampleList.concat(famTestTrialList);
+			sample1 = sampleList1.concat(testTrialList1);
+			sample2 = sampleList2.concat(testTrialList2);
+			temp = fam.concat(sample1);
+			timeline = temp.concat(sample2);
+		};
+
+  //function for Javascript-PHP communication
+  function saveData(filename, filedata){
+  $.ajax({
+         type:'post',
+         cache: false,
+         url: 'save_data.php', // this is the path to the above PHP script
+         data: {filename: filename, filedata: filedata}
+         });
+  };
+
+  //preload all images
+  var imageSet=["stims/bear.png", "stims/penguin.png", "stims/pig.png","stims/twohands.png", "stims/cow.png","stims/1.png","stims/2.png","stims/3.png","stims/4.png","stims/5.png","stims/6.png","stims/7.png","stims/8.png"];
+  
+  var timeline=[];
+  
+  if (condition=="active") {
+	  var yokedData=[];
+	  createTrials(yokedData);
+	  jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
+  } else if (condition=="passive") {
+  	Papa.parse("http://sapir.psych.wisc.edu/~zettersten/experiments/act/version1/data/activeWord_"+yoked_id+".csv", {
+  		download: true,
+  		dynamicTyping: true,
+		header: true,
+  		complete: function(results) {
+  			//console.log("test");
+  			//console.log(results.data);
+  			var yokedData=results.data;
+			createTrials(yokedData);
+			jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
+			//startExperiment();
+			//console.log(yokedData[0]["trialNum"]);
+  		}
+  	});
+};
+  
+function updateLoadedCount(nLoaded){
+    var percentcomplete = nLoaded / allAudio.length * 100;
+
+    // could put something fancier here, like a progress bar
+    // or updating text in the DOM.
+    console.log('Loaded '+percentcomplete+'% of audio files');
+}
+  
+  function startExperiment(){
+    jsPsych.init({
+      display_element: $('#jspsych-target'),
+      timeline: timeline,
+  	  fullscreen: true,
+  	  default_iti: 0,
+      on_finish: function() {
+        //jsPsych.data.displayData();
+		//jsPsych.data.localSave("text.csv","csv")
+		saveData("activeWord_"+subject_id+".csv", jsPsych.data.dataAsCSV());
+      }
+    });
+  };
+</script>
+
+</html>

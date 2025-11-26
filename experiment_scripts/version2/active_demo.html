@@ -27,11 +27,27 @@
 $('body,html').addClass('stop-scrolling');
 //$('body').bind('touchmove', function(e){e.preventDefault()})
 
+//MZ edit
+//general function for grabbing parameter from a URL
+function getParamFromURL( name ) {
+  name = name.replace(/[\[]/,"\\[").replace(/[\]]/,"\\]");
+  var regexS = "[\?&]"+name+"=([^&#]*)";
+  var regex = new RegExp( regexS );
+  var results = regex.exec( window.location.href );
+  if( results == null )
+    return "";
+  else
+    return results[1];
+}
 
 //Enter subject id
-var subject_id = prompt("Enter subject id", "test");
-var condition = prompt("Condition (active or passive)","active");
-var input = prompt("Enter input type (touch or click)","click");
+//MZ edit for demo
+// var subject_id = prompt("Enter subject id", "test");
+// var condition = prompt("Condition (active or passive)","active");
+// var input = prompt("Enter input type (touch or click)","click");
+var subject_id = "test";
+var condition = getParamFromURL('condition');
+var input = "touch";
 
 var inputType="";
 if (input=="touch") {
@@ -42,6 +58,7 @@ if (input=="touch") {
 subject_id.replace(/[^A-Za-z0-9_]/g, "");
 condition.replace(/[^A-Za-z0-9_]/g, "");
 //var listNum = prompt("Enter list number (1 or 2)","1");
+//MZ edit for demo
 if (condition=="passive") {
 	var yoked_id = prompt("Enter yoked subject id","test");
 };

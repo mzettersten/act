@@ -17,12 +17,14 @@
     type: 'button-response',
     stimulus: "",
     choices: ['Active', 'Yoked Passive', 'Yoked Passive Mismatch'],
-    prompt: "<p>Choose the condition to test.</p>",
+    prompt: "<p style='text-align: center;'>Choose the condition to test.</p>",
 	on_finish: function(data) {
     if (data.button_pressed == 2) {
-      window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo_yoked_passive_mismatch.html";
-    } else {
-      window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo.html";
+      window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo_yoked_passive_mismatch.html?condition=passive";
+    } else if (data.button_pressed == 1) {
+      window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo.html?condition=passive";
+    } else if (data.button_pressed == 0) {
+      window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo.html?condition=active";
     }
   }
   });

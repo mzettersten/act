@@ -19,19 +19,6 @@
     choices: ['Active', 'Yoked Passive', 'Yoked Passive Mismatch'],
     prompt: "<p>Choose the condition to test.</p>",
 	on_finish: function(data) {
-		console.log(data)
-		console.log(data.button_pressed)
-  }
-  });
-
-  timeline.push({
-    type: 'button-response',
-    stimulus: "",
-    choices: ['Active', 'Yoked Passive', 'Yoked Passive Mismatch'],
-    prompt: "<p>Choose the condition to test.</p>",
-	on_finish: function(data) {
-		console.log(data)
-		console.log(data.button_pressed)
     if (data.button_pressed == 2) {
       window.location.href = "https://mzettersten.github.io/act/experiment_scripts/version2/active_demo_yoked_passive_mismatch.html";
     } else {

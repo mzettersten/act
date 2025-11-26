@@ -60,7 +60,9 @@ subject_id.replace(/[^A-Za-z0-9_]/g, "");
 condition.replace(/[^A-Za-z0-9_]/g, "");
 //var listNum = prompt("Enter list number (1 or 2)","1");
 if (condition=="passive") {
-	var yoked_id = prompt("Enter yoked subject id","test");
+	//MZ edit for demo
+	//var yoked_id = prompt("Enter yoked subject id","test");
+	var yoked_id = "test";
 };
 
 
@@ -754,7 +756,9 @@ function createTrials(yokedData) {
 	  createTrials(yokedData);
 	  jsPsych.pluginAPI.preloadImages(imageSet, function(){ jsPsych.pluginAPI.preloadAudioFiles(allAudio, function() {startExperiment(); },function(nLoaded) { updateLoadedCount(nLoaded); });});
   } else if (condition=="passive") {
-  	Papa.parse("http://sapir.psych.wisc.edu/~zettersten/experiments/act/version2/data/activeWord_v2_"+yoked_id+".csv", {
+  	//MZ edit
+  	//Papa.parse("https://sapir.psych.wisc.edu/~zettersten/experiments/act/version2/data/activeWord_v2_"+yoked_id+".csv", {
+	Papa.parse("https://mzettersten.github.io/act/experiment_scripts/version2/data/activeWord_v2_"+yoked_id+".csv", {
   		download: true,
   		dynamicTyping: true,
 		header: true,

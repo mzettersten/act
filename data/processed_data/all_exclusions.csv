@@ -1,0 +1,67 @@
+subject,condition,age_y,exclude_new,exclude_active_passive_comparison,exclusion_reason,exclusion_reason_notes,version,experiment,late_data_collection
+p101,active,5.66,y,y,pilot,pilot participant,1,exp1,n
+p102,active,5.18,y,y,pilot,pilot participant,1,exp1,n
+p103,active,4.09,y,y,pilot,pilot participant,1,exp1,n
+p104,active,6.38,y,y,pilot,pilot participant,1,exp1,n
+p105,active,5.33,y,y,pilot,pilot participant,1,exp1,n
+p116,active,4.07,y,y,experiment ended early,the experiment ended in the middle of test phase 1. no response data was stored,1,exp1,n
+p119,active,3.66,y,y,experiment ended early,the experiment ended prior to the test phase. no response data was stored for this participant,1,exp1,n
+p120,passive,4.05,y,y,experimenter error,data is actually in principle fine in the sense that the experimental session itself was OK and the yoking process ultimately was correct too. yoked ID was originally incorrectly entered in the subject log which caused us to think that this child got the active data from a 5yo (wrong age group). However the age group was entered incorrectly initially in the subject log and the child actually did receive data from a child from the correct age group (4yo; p110). Continuing to exclude this participant due to the intial data entry confusion and to preserve the 1:1 mapping. The data from this child is however in principle fine.,1,exp1,n
+p149,active,4.63,y,y,technical error,study froze during experiment session. no response data was stored,1,exp1,n
+p149,passive,4.04,y,y,yoking error,mom said the child was three and so the child was assigned the data from a 3yo,1,exp1,n
+p183,active,3.79,y,y,language exposure,"in addition to the low language exposure recorded by the parent in the survey, the experimenter also noted that the child seemed subjectively to struggle with comprehending the (English) experiment instructions. This also seemed to lead to parent interference, i.e. the parent spoke throughout the experiment",1,exp1,n
+p184,active,5.07,y,y,no yoked participant,no participant was run in the corresponding yoked passive condition before data collection ended,1,exp1,n
+p179,active,4.55,y,y,no yoked participant,no participant was run in the corresponding yoked passive condition before data collection ended,1,exp1,n
+p107,active,4.8,y,y,no yoked participant,no participant was run in the corresponding yoked passive condition before data collection ended,1,exp1,n
+p201,active,NA,y,y,pilot,pilot participant,2A,expS1,n
+p202,active,2.77,y,y,pilot,pilot participant; outside of age range (2yo),2A,expS1,n
+p206,active,NA,y,y,pilot,pilot participant; around 7 years of age,2A,expS1,n
+p226,active,4.62,y,y,experiment ended early,child only made it through the first block,2A,expS1,n
+p218,active,3.85,y,y,parent interference,parent was repeating many words/ guiding child,2A,expS1,n
+p221,active,4.57,y,y,sibling interference,sister was present and gave a lot of feedback during task,2A,expS1,n
+p310,active,3.25,y,y,technical error,experiment failed during initial run of experiment; a second run was attempted but was incomplete,2B,exp2,n
+p321,passive_mismatched,3.34,y,y,experiment ended early,,2B,exp2,n
+p324,passive_mismatched,4.35,y,y,previous participant,participated in a previous version of the experiment,2B,exp2,n
+p343,passive_mismatched,4.87,y,y,developmental concern,"parent reported that child has ASD; also technically parent interference, parent pointed during study",2B,exp2,n
+p350,passive_mismatched,3.06,y,y,experiment ended early,,2B,exp2,n
+p369,passive_mismatched,4,y,y,technical error,passive condition would not load,2B,exp2,n
+p370,passive_mismatched,5.31,y,y,previous participant,participated in a previous version of the experiment,2B,exp2,n
+p399,passive_mismatched,4.03,y,y,previous participant,identical with p382,2B,exp2,n
+p401,passive_mismatched,4.34,y,y,developmental concern,mother indicated that child may have ASD,2B,exp2,n
+p404,passive_mismatched,4.49,y,y,yoking error,"experimenter error: yoked to the wrong age group, i.e. a three-year-old instead of a four-year-old; data otherwise ok",2B,exp2,n
+p406,active,4.64,y,y,experiment ended early,didn't make it through first block,2B,exp2,n
+p415,passive_mismatched,5.44,y,y,experiment ended early,didn't make it through first block,2B,exp2,n
+p440,passive_mismatched,4.23,y,y,experiment ended early,,2B,exp2,n
+p452,passive_mismatched,3.43,y,y,experiment ended early,only made it through first block,2B,exp2,n
+p461,passive_mismatched,5.81,y,y,yoking error,kid did well but incorrectly matched with a three-year-olds' data,2B,exp2,n
+p509,passive,4.51,y,y,experiment ended early,child made it through round 1 but aborted study midway through sampling phase of round 2 (four sampling trials remaining),2C,exp2,n
+p510,passive,6.83,y,y,age exclusion,participant was too old,2C,exp2,n
+p511,passive,4.76,y,y,previous participant,same participant as p501,2C,exp2,n
+p512,NA,NA,y,y,did not begin study,child changed their mind about participating before the study began,2C,exp2,n
+p527,passive,6.57,y,y,age exclusion,,2C,exp2,n
+p538,passive,3.41,y,y,experiment ended early,"also some parental interference, child needed a lot of support from mom",2C,exp2,n
+p539,passive,5.83,y,y,previous participant,,2C,exp2,n
+p540,passive,4.01,y,y,previous participant,,2C,exp2,n
+p548,passive,4.85,y,y,previous participant,,2C,exp2,n
+p550,passive,3.24,y,y,experiment ended early,ended early in round 1,2C,exp2,n
+p556,passive,4.13,y,y,parent interference,"parent interrupted the study, also yoking error: incorrect yoked ID age assignment",2C,exp2,n
+p560,passive,3.53,y,y,experiment ended early,"only completed round 1, also yoking error: incorrect yoked ID age assignment",2C,exp2,n
+p571,passive,3.83,y,y,experiment ended early,did not complete round 1,2C,exp2,n
+p577,passive,3.29,y,y,experiment ended early,,2C,exp2,n
+p579,passive,3.22,y,y,experiment ended early,,2C,exp2,n
+p580,passive,4.97,y,y,previous participant,same participant as p501 and p511,2C,exp2,n
+p581,passive,3.06,y,y,previous participant,,2C,exp2,n
+p582,passive,4.81,y,y,previous participant,same participant as p524,2C,exp2,n
+p585,passive,7.1,y,y,age exclusion,too old,2C,exp2,n
+p589,passive,3.65,y,y,yoking error,incorrect yoked ID age assignment,2C,exp2,n
+p591,active,3.08,y,y,experiment ended early,only completed round 1,2C,exp2,n
+p592,passive,4.44,y,y,parent interference,mom helped the child,2C,exp2,n
+p601,passive,4.27,y,y,experiment ended early,quit before completing round 2,2C,exp2,n
+p604,passive,2.89,y,y,age exclusion,too young,2C,exp2,n
+p606,passive_mismatched,4.89,y,y,yoking error,incorrect yoked ID age assignment,2B,exp2,y
+p609,passive_mismatched,3.42,y,y,experiment ended early,quit at beginning of round 2,2B,exp2,y
+p605,passive_mismatched,4.15,n,n,,,2B,exp2,y
+p607,passive_mismatched,3.73,n,n,,,2B,exp2,y
+p608,passive_mismatched,3.15,n,n,,,2B,exp2,y
+p610,passive_mismatched,3.91,n,n,,,2B,exp2,y
+p611,passive_mismatched,3,n,n,,,2B,exp2,y

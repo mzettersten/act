@@ -1,0 +1,155 @@
+column_name,description
+image1,First image presented on the given trial
+image2,Second image presented on the given trial
+image3,Third image presented on the given trial
+image4,Fourth  image presented on the given trial
+push_image1,"On first introduction of the images, the first image ""uncovered""/ tapped by the participant"
+push_image2,"On first introduction of the images, the second image ""uncovered""/ tapped by the participant"
+push_image3,"On first introduction of the images, the third image ""uncovered""/ tapped by the participant"
+push_image4,"On first introduction of the images, the fourth image ""uncovered""/ tapped by the participant"
+location_index1,Location of the image corresponding to image1
+location_index2,Location of the image corresponding to image2
+location_index3,Location of the image corresponding to image3
+location_index4,Location of the image corresponding to image4
+rt_push1,"Reaction time for when image1 was ""uncovered"" on first introduction"
+rt_push2,"Reaction time for when image2 was ""uncovered"" on first introduction"
+rt_push3,"Reaction time for when image3 was ""uncovered"" on first introduction"
+rt_push4,"Reaction time for when image4 was ""uncovered"" on first introduction"
+trial_num,
+trial_type,
+stim_set,
+trial_type_2,
+trial_index,
+time_elapsed,
+internal_node_id,
+subject_old,
+condition,
+audio1,
+audio2,
+audio3,
+audio4,
+rt,
+choice,
+choice_image,
+choice_audio,
+stimulus,
+button_pressed,
+target_location,
+foil_location,
+target_image,
+foil_image,
+test_audio,
+choice_location,
+choice_type,
+is_right,
+yoked_id,
+version,
+experiment,
+available_image1,
+available_image2,
+option1,
+option2,
+exposure_num,
+subject,
+condition_c,
+stim_set1,
+stim_set_c,
+subj_code,
+age,
+l1,Child's first language
+l1percent,Parent-reported percent of time child hears L1
+l1hours,Parent-reported number of hours per day child hears L1
+l2,Child's second language
+l2percent,Parent-reported percent of time child hears L2
+l2hours,Parent-reported number of hours per day child hears L2
+l3,Child's third language
+l3percent,Parent-reported percent of time child hears L3
+l3hours,Parent-reported number of hours per day child hears L4
+browser,Browser used on tablet to present experiment (Firefox)
+pilot,Is the participant a pilot participant? (Y/N)
+exclude,Should the participant be excluded? (Y/N)
+video,Whether the parents provided a video release (not relevant here since sessions were not recorded)
+data_file,Whether a data file is available for the participant (Y/N)
+experimenter,
+notes,
+l4,
+l4percent,
+l4hours,
+exp_version,
+exp,
+exclude_reason,
+gender,
+hispanic_latino_yn,
+ethnicity_race,
+languages_besides_english_yn,
+languages_besides_english,
+language_hours_per_day,
+language_percent,
+native_language_speakers,
+language_speakers,
+age_group,
+exclude_new,
+exclude_active_passive_comparison,
+exclusion_reason,
+exclusion_reason_notes,
+late_data_collection,
+choice1,
+choice2,
+choice3,
+choice4,
+choice1_num,
+choice2_num,
+choice3_num,
+choice4_num,
+total_choices,
+gini,
+entropy,
+max_choice,
+exposure_number,
+image1_sorted,
+image2_sorted,
+image3_sorted,
+image4_sorted,
+high_label_exposure,
+medium_label_exposure,
+low_label_exposure,
+no_label_exposure,
+image_option_type1,
+image_option_type2,
+choice_kind,
+target_kind,
+choice_trial_type,
+lower_exposure_choice,
+exp_more_frequent_choice,
+image1_exp_freq,
+image2_exp_freq,
+image1_exp_log_rel_freq,
+image2_exp_log_rel_freq,
+exp_log_rel_freq_diff,
+exp_log_rel_freq_diff_c,
+high_label_freq,
+medium_label_freq,
+low_label_freq,
+no_label_freq,
+object1_cur_freq,
+object2_cur_freq,
+high_cur_freq,
+medium_cur_freq,
+low_cur_freq,
+no_cur_freq,
+increment_high,
+increment_medium,
+increment_low,
+increment_no,
+add_high,
+add_medium,
+add_low,
+add_no,
+image1_cur_exp_freq,
+image2_cur_exp_freq,
+cur_active_trial_num,
+image1_cur_exp_log_rel_freq,
+image2_cur_exp_log_rel_freq,
+cur_exp_log_rel_freq_diff,
+cur_exp_log_rel_freq_diff12,
+is_image1_choice,

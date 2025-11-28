@@ -1,0 +1,2292 @@
+---
+title: "Act Project Analysis"
+author: "Anonymized for peer review"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+knitr::opts_chunk$set(
+                prompt  = FALSE,
+                cache   = FALSE,
+                echo = TRUE,
+                warning=F,
+                message=F)
+set.seed(1025) #set seed
+
+```
+
+```{r load packages and data, include=FALSE}
+library(here)
+source(here::here("helper","summarizeData_tidy.R"))
+source(here::here("helper","vif.mer.R"))
+library(tidyverse)
+library(lme4)
+library(cowplot)
+library(sciplot)
+library(car)
+library(AICcmodavg)
+library(viridis)
+library(ggbeeswarm)
+library(ggstance)
+library(gghalves)
+library(lmerTest)
+library(broom.mixed)
+theme_set(theme_cowplot())
+```
+
+Analysis walkthrough for the paper “Children actively select words that support learning” (authors removed, 2025).
+
+# Preparing the data
+
+## Read in data
+
+We first set up the paths to relevant data files and read in the data.
+
+```{r}
+#set up paths
+read_path <- here::here("..","data","processed_data")
+figure_path <- here::here("..","figures")
+
+#Read in data file
+d_complete <- read.csv(here::here(read_path,"act_allData_processed.csv"))
+
+#read in subject choices
+subject_choice <- read_csv(here::here(read_path,"act_subject_choice_processed.csv"))
+
+#read in exclusions info
+exclusions <- read.csv(here::here(read_path,"all_exclusions.csv"))
+```
+
+## Handle exclusions
+
+Next, we handle and summarize exclusions.
+
+Note that for the purposes of the paper, yoking errors are considered to be experimenter errors (i.e., the experimenter made an error in terms of which participant id to yoke a new participant to).
+
+```{r}
+#slightly simplifying regrouping of exclusion reasons for more compact classification of exclusion types
+exclusions <- exclusions %>%
+  mutate(
+    exclusion_type = case_when(
+      exclusion_reason %in% c("technical error", "experimenter error") ~ "technical or experimenter error",
+      exclusion_reason %in% c("yoking error","no yoked participant") ~ "yoking-related issue",
+      exclusion_reason %in% c( "developmental concern","language exposure") ~ "participant characteristics",
+      exclusion_reason %in% c("pilot","age exclusion","did not begin study","previous participant") ~ "outside official sample",
+      exclusion_reason %in% c("sibling interference", "parent interference") ~ "outside interference",
+      exclusion_reason %in% c("experiment ended early") ~ "incomplete"
+    )
+  )
+
+  
+exclusion_table <- exclusions %>%
+  filter(exclude_new == "y" |exclude_active_passive_comparison=="y") %>%
+  group_by(experiment,exclusion_type,exclusion_reason) %>%
+  count()
+
+exclusion_table %>%
+  filter(exclusion_type!="outside official sample") %>%
+  kable()
+#participants "outside official sample" not counted towards tally
+#these are participants who (a) were pilots, (b) were outside of the age range, but were run unofficially on the task anyway to provide equal opportunities to all museum visitors, or (c) had already participated in a version of the experiment
+```
+
+Finally, we remove exclusions from the main data file.
+
+```{r}
+d_post_exclusion <- d_complete %>%
+  filter(exclude_new == "n" |exclude_active_passive_comparison == "n")
+subject_choice_post_exclusion <- subject_choice %>%
+  filter(subject %in% unique(d_post_exclusion$subject))
+```
+
+## Summarize participant information
+
+The next bit of code creates the summarizing datasets for reporting demographic characteristics.
+
+```{r}
+participant_grouping_variables <- c("experiment","version","subject","yoked_id","condition","age","age_group","gender","hispanic_latino_yn","ethnicity_race","languages_besides_english_yn","languages_besides_english","l1","l1percent","l1hours","l2","l2percent","l2hours","l3","l3percent","l3hours","l4","l4percent","l4hours","exclude_new","exclude_active_passive_comparison","exclusion_reason","exclusion_reason_notes")
+
+####summarize participants
+
+# before exclusions
+participant_info_pre_exclusions <- d_complete %>%
+  dplyr::filter( trial_type=="test") %>%
+  #gnarly, but just a way to convert the character vector to a set of symbols and unquote that vector
+  dplyr::group_by(!!!syms(participant_grouping_variables)) %>%
+  dplyr::summarize(
+    num_test_trials = sum(trial_type=="test",na.rm=TRUE),
+    mean_test_accuracy=mean(is_right[trial_type=="test"],na.rm=TRUE)
+    )
+
+#after exclusions
+participant_info_post_exclusions <- d_complete %>%
+  dplyr::filter( trial_type=="test") %>%
+  filter(exclude_new == "n" & exclude_active_passive_comparison=="n") %>%
+  dplyr::group_by(!!!syms(participant_grouping_variables)) %>%
+  dplyr::summarize(
+    num_test_trials = sum(trial_type=="test",na.rm=TRUE),
+    mean_test_accuracy=mean(is_right[trial_type=="test"],na.rm=TRUE)
+    )
+```
+
+## Overview of yoking characteristics
+
+This provides an overview of how all participants were yoked in each experiment - basically, it's a sanity check that the yoking process worked and we have yoked matches for each participant in the Active condition.
+
+```{r}
+#overview over id matching
+yoked_matching_table <- participant_info_post_exclusions %>%
+  ungroup() %>%
+  select(experiment,yoked_id,condition,subject,age_group) %>%
+  group_by(yoked_id) %>%
+  pivot_wider(names_from=condition,values_from=subject)
+yoked_matching_table %>%
+  kable()
+#note that there's a very small inconsistency for p148 - they are treated as a four-year-old, even though they are 3.99 years (child was two days away from birthday)
+#we decided that this is within an acceptable margin, so exclusion is not merited
+```
+
+# Demographics {.tabset}
+
+An overview of demographic information for the final sample, after exclusions. The descriptives are summarized overall, for Experiment 1 and 2 only (i.e., the full sample in the main manuscript), and broken down by each experiment
+
+## Age, Gender
+
+### Overall
+
+```{r, message=F, warning=F}
+####summarize demographics####
+participant_demographics <-  participant_info_post_exclusions %>%
+  ungroup() %>%
+  summarize(N=n(), 
+            mean_age = round(mean(age,na.rm=TRUE),1), 
+            sd_age = round(sd(age,na.rm=TRUE),1), 
+            min_age = min(age,na.rm=TRUE), 
+            max_age = max(age,na.rm=TRUE),
+            count_female = sum(gender=='female'),
+            count_male = sum(gender =='male'),
+            l1_english_speaker=sum(l1=="English",na.rm=TRUE),
+            multiple_languages=sum(languages_besides_english_yn=="Yes",na.rm=TRUE)
+            )
+kable(participant_demographics)
+```
+
+### Experiment 1 and 2 only
+
+```{r, message=F, warning=F}
+####summarize demographics####
+participant_demographics_exp12 <-  participant_info_post_exclusions %>%
+  filter(experiment %in% c("exp1","exp2")) %>%
+  ungroup() %>%
+  summarize(N=n(), 
+            mean_age = round(mean(age,na.rm=TRUE),1), 
+            sd_age = round(sd(age,na.rm=TRUE),1), 
+            min_age = min(age,na.rm=TRUE), 
+            max_age = max(age,na.rm=TRUE),
+            count_female = sum(gender=='female'),
+            count_male = sum(gender =='male'),
+            l1_english_speaker=sum(l1=="English",na.rm=TRUE),
+            multiple_languages=sum(languages_besides_english_yn=="Yes",na.rm=TRUE)
+            )
+kable(participant_demographics_exp12)
+```
+
+### By Experiment
+
+```{r, message=F, warning=F}
+####summarize demographics####
+participant_demographics_by_exp <-  participant_info_post_exclusions %>%
+  ungroup() %>%
+  group_by(experiment) %>%
+  summarize(N=n(), 
+            mean_age = round(mean(age,na.rm=TRUE),1), 
+            sd_age = round(sd(age,na.rm=TRUE),1), 
+            min_age = min(age,na.rm=TRUE), 
+            max_age = max(age,na.rm=TRUE),
+            count_female = sum(gender=='female'),
+            count_male = sum(gender =='male'),
+            l1_english_speaker=sum(l1=="English",na.rm=TRUE),
+            multiple_languages=sum(languages_besides_english_yn=="Yes",na.rm=TRUE)
+            )
+kable(participant_demographics_by_exp)
+```
+
+## Race, Ethnicity
+
+### Overall
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  ungroup() %>%
+  group_by(ethnicity_race) %>%
+  summarize(count=n(),
+            percent=count/nrow(participant_info_post_exclusions)) %>%
+  kable()
+```
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  ungroup() %>%
+  group_by(hispanic_latino_yn) %>%
+  summarize(count=n(),
+            percent=count/nrow(participant_info_post_exclusions)) %>%
+  kable()
+```
+
+### Experiment 1 and 2 only
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  filter(experiment %in% c("exp1","exp2")) %>%
+  ungroup() %>%
+  group_by(ethnicity_race) %>%
+  summarize(count=n(),
+            percent=count/nrow(filter(participant_info_post_exclusions,experiment %in% c("exp1","exp2")))) %>%
+  kable()
+```
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  filter(experiment %in% c("exp1","exp2")) %>%
+  ungroup() %>%
+  group_by(hispanic_latino_yn) %>%
+  summarize(count=n(),
+            percent=count/nrow(filter(participant_info_post_exclusions,experiment %in% c("exp1","exp2")))) %>%
+  kable()
+```
+
+### By Experiment
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  ungroup() %>%
+  group_by(experiment,ethnicity_race) %>%
+  summarize(count=n(),
+            #percent within experiment
+            percent=count/nrow(participant_info_post_exclusions[participant_info_post_exclusions$experiment==unique(experiment),])
+            ) %>%
+  kable()
+```
+
+```{r, message=F, warning=F}
+participant_info_post_exclusions %>%
+  ungroup() %>%
+  group_by(experiment,hispanic_latino_yn) %>%
+  summarize(count=n(),
+            #percent within experiment
+            percent=count/nrow(participant_info_post_exclusions[participant_info_post_exclusions$experiment==unique(experiment),])) %>%
+  kable()
+```
+
+# Experiment 1 {.tabset}
+
+The next section reports the analysis and results (with corresponding code) for Experiment 1.
+
+```{r}
+exp1_d <- d_post_exclusion %>%
+  filter(experiment == "exp1")
+
+subject_choice_active_exp1 <- subject_choice_post_exclusion %>%
+  filter(version == "1" & condition=="active")
+```
+
+## Sampling Phase {.tabset}
+
+### Descriptives
+
+Children sampled objects very evenly throughout the sampling phase.
+
+```{r}
+summarize_choice_counts <- exp1_d %>%
+  filter(trial_type=="learning") %>%
+  group_by(subject, stim_set, choice_image) %>%
+  count()
+
+summarize_choice_counts %>%
+  ggplot(aes(choice_image,n))+
+  geom_histogram(stat="identity")+
+  facet_wrap(~subject)+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+#summarize gini by participant
+subject_choice_exp1_by_subj <- subject_choice_active_exp1 %>%
+  group_by(subject) %>%
+  summarize(gini = mean(gini))
+t.test(subject_choice_exp1_by_subj$gini)
+```
+
+### Bootstrapping analysis
+
+To determine whether participants sampled objects more equally than would be expected by chance, we used a bootstrapping analysis in which we simulated datasets in which all choices were random (n = 1000 total simulations), computed the Gini coefficient for each simulated dataset, and then computed the probability of observing the Gini coefficient from our current sample within this null distribution. This analysis found that our Gini coefficient was extremely unlikely to be observed for random behavior (p < .001; average Gini coefficient for random datasets: M = 0.393, 95% CI: [0.392, 0.394]), suggesting that children were much more likely than would be expected by chance to sample evenly across their choice options.
+
+The code for this analysis can be found in a separate R script in the OSF/GitHub repository: 3_sampling_bootstrapping_analysis.R.
+
+## Test Phase {.tabset}
+
+### Overall Accuracy
+
+Below, we report average test accuracy by condition.
+
+```{r}
+exp1_test_subj <- exp1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,condition) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  )
+
+exp1_test_summarized <- exp1_test_subj %>%
+  group_by(condition) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+exp1_test_summarized %>%
+  select(-avg_accuracy_ci) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Condition", "N", "Average Accuracy","CI"),digits=3)
+```
+
+### Main Model
+
+```{r}
+#### TODO check model convergence here ####
+#m <- glmer(is_right~condition_c*stim_set_c+(1+stim_set_c|subject)+(1+stim_set_c*condition_c|target_image)+(1+stim_set_c*condition_c|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
+#final model
+m <- glmer(is_right~condition_c*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
+summary(m)
+
+#extract coefficients from model
+#get parameter estimates
+model_estimates_exp1_main <- m %>%
+  tidy(effects="fixed") 
+
+```
+
+To test for differences in word learning across condition, we fit a logistic mixed-effects model predicting participants’ trial-by-trial accuracy from condition (dummy coded), experiment block (centered), and their interaction. The maximally converging random-effects structure included random intercepts for participants, items, and yoked pairings (i.e., observations from participants who were yoked together were treated as non-independent). There was no significant difference between word learning accuracy in the Active (M = `r exp1_test_summarized %>% filter(condition=="active") %>% pull(avg_accuracy) %>% round(.,3)*100`%, 95% CI [`r exp1_test_summarized %>% filter(condition=="active") %>% pull(avg_accuracy_lower_ci) %>% round(.,3)*100`%, `r exp1_test_summarized %>% filter(condition=="active") %>% pull(avg_accuracy_upper_ci) %>% round(.,3)*100`%]) and the Yoked Passive condition (M = `r exp1_test_summarized %>% filter(condition=="passive") %>% pull(avg_accuracy) %>% round(.,3)*100`%, 95% CI [`r exp1_test_summarized %>% filter(condition=="passive") %>% pull(avg_accuracy_lower_ci) %>% round(.,3)*100`%, `r exp1_test_summarized %>% filter(condition=="passive") %>% pull(avg_accuracy_upper_ci) %>% round(.,3)*100`%]), b = `r model_estimates_exp1_main %>% filter(term=="condition_c") %>% pull(estimate) %>% round(.,2)`, z = `r model_estimates_exp1_main %>% filter(term=="condition_c") %>% pull(statistic) %>% round(.,2)`, p = `r model_estimates_exp1_main %>% filter(term=="condition_c") %>% pull(p.value) %>% round(.,2)`. We also found no significant condition by block interaction, b = `r model_estimates_exp1_main %>% filter(term=="condition_c:stim_set_c") %>% pull(estimate) %>% round(.,2)`, z = `r model_estimates_exp1_main %>% filter(term=="condition_c:stim_set_c") %>% pull(statistic) %>% round(.,2)`, p = `r model_estimates_exp1_main %>% filter(term=="condition_c:stim_set_c") %>% pull(p.value) %>% round(.,2)`.
+
+### Plot
+
+```{r}
+ggplot(exp1_test_summarized,aes(condition,avg_accuracy,color=condition,fill=condition))+
+  geom_half_violin(data= exp1_test_subj,aes(y=mean_accuracy),position = position_nudge(x = -.1, y = 0), width=0.8,adjust=1.5,trim = T, alpha = .8,color=NA,side="l")+
+  geom_point(stat="identity",size=4,position = position_nudge(x = .2, y = 0))+
+  geom_errorbar(aes(ymin=avg_accuracy_lower_ci,ymax=avg_accuracy_upper_ci),width=0,position = position_nudge(x = .2, y = 0))+
+  geom_jitter(data= exp1_test_subj,aes(y=mean_accuracy),size=2,width=0.05,height=0.025,alpha=0.4,stroke=NA)+
+  theme_cowplot()+
+  theme(legend.position="none")+
+  geom_hline(yintercept=0.5,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  ylim(-0.04,1.04)+
+  scale_x_discrete(
+    breaks=c("active","passive"),
+    labels=c("Active","Yoked Passive"))+
+  ylab("Word Learning Accuracy")+
+  xlab("Condition")
+ggsave(here(figure_path,"exp1_accuracy_overall.png"),width=9,height=6,bg = "white")
+```
+
+### Test Accuracy By Block
+
+Here, we report average test accuracy by condition, additionally broken down by Block.
+
+```{r}
+exp1_test_subj_block <- exp1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,condition,stim_set) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  ) %>%
+  mutate(block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2"))
+
+exp1_test_summarized_block <- exp1_test_subj_block %>%
+  group_by(condition,stim_set, block) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+exp1_test_summarized_block %>%
+  ungroup() %>%
+  arrange(block) %>%
+  select(-avg_accuracy_ci,-stim_set) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(block,condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Block","Condition", "N", "Average Accuracy","CI"),digits=3)
+```
+
+```{r}
+ggplot(exp1_test_summarized_block,aes(condition,avg_accuracy,color=condition,fill=condition))+
+  geom_half_violin(data= exp1_test_subj_block,aes(y=mean_accuracy),position = position_nudge(x = -.1, y = 0), width=0.8,adjust=1.5,trim = T, alpha = .8,color=NA,side="l")+
+  geom_point(stat="identity",size=4,position = position_nudge(x = .2, y = 0))+
+  geom_errorbar(aes(ymin=avg_accuracy_lower_ci,ymax=avg_accuracy_upper_ci),width=0,position = position_nudge(x = .2, y = 0))+
+  geom_jitter(data= exp1_test_subj_block,aes(y=mean_accuracy),size=2,width=0.05,height=0.025,alpha=0.4,stroke=NA)+
+  theme_cowplot()+
+  theme(legend.position="none")+
+  geom_hline(yintercept=0.5,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  ylim(-0.04,1.04)+
+  scale_x_discrete(
+    breaks=c("active","passive"),
+    labels=c("Active","Yoked Passive"))+
+  ylab("Word Learning Accuracy")+
+  xlab("Condition")+
+  facet_grid(~block)
+ggsave(here(figure_path,"exp1_accuracy_by_block.png"),width=9,height=6,bg = "white")
+```
+
+### Interaction with Age
+
+```{r}
+#center age
+exp1_d <- exp1_d %>%
+  mutate(age_c = age - mean(age,na.rm=T))
+
+#### TODO check model convergence here ####
+#m <- glmer(is_right~condition*stim_set_c+(1+stim_set_c*condition_c|subject)+(1+stim_set_c*condition_c|target_image)+(1+stim_set_c*condition_c|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
+m <- glmer(is_right~condition_c*age_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
+summary(m)
+confint(m, method="Wald")[4:7,]
+
+model_estimates_exp1_age_interaction <- m %>%
+  tidy(effects="fixed")
+```
+
+To test for possible differences in the effect of active learning across age, we fit a logistic mixed-effects model predicting participants’ trial-by-trial accuracy from condition (dummy coded), age (centered), and their interaction. We included random intercepts for participants, items and for yoked pairings (i.e., observations from participants who were yoked together were treated as non-independent). We found no evidence for an interaction between age and condition (p = `r model_estimates_exp1_age_interaction %>% filter(term=="condition_c:age_c") %>% pull(p.value) %>% round(.,2)`).
+
+Here, we plot the condition effect for each age group.
+
+```{r}
+exp1_test_subj_age_group <- exp1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,condition,age_group) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  ) %>%
+  mutate(
+    age_group_f = factor(age_group, levels=c("three-year-olds","four-year-olds","five-year-olds")))
+
+exp1_test_summarized_age_group <- exp1_test_subj_age_group %>%
+  group_by(condition,age_group_f) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+exp1_test_summarized_age_group %>%
+  ungroup() %>%
+  select(-avg_accuracy_ci) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(age_group_f,condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Age Group","Condition", "N", "Average Accuracy","CI"),digits=3)
+```
+
+```{r}
+ggplot(exp1_test_summarized_age_group,aes(condition,avg_accuracy,color=condition,fill=condition))+
+  geom_half_violin(data= exp1_test_subj_age_group,aes(y=mean_accuracy),position = position_nudge(x = -.1, y = 0), width=0.8,adjust=1.5,trim = T, alpha = .8,color=NA,side="l")+
+  geom_point(stat="identity",size=4,position = position_nudge(x = .2, y = 0))+
+  geom_errorbar(aes(ymin=avg_accuracy_lower_ci,ymax=avg_accuracy_upper_ci),width=0,position = position_nudge(x = .2, y = 0))+
+  geom_jitter(data= exp1_test_subj_age_group,aes(y=mean_accuracy),size=2,width=0.05,height=0.025,alpha=0.4,stroke=NA)+
+  theme_cowplot()+
+  theme(legend.position="none")+
+  geom_hline(yintercept=0.5,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  ylim(-0.04,1.04)+
+  scale_x_discrete(
+    breaks=c("active","passive"),
+    labels=c("Active","Yoked Passive"))+
+  ylab("Word Learning Accuracy")+
+  xlab("Condition")+
+  facet_grid(~age_group_f)
+ggsave(here(figure_path,"exp1_accuracy_by_age_group.png"),width=9,height=6,bg = "white")
+```
+
+#### Additional robustness check: 3-way interaction between block, age, and condition
+
+```{r}
+#three-way interaction
+m <- glmer(is_right~condition_c*stim_set_c*age_c+(1+stim_set_c|subject)+(1|target_image)+(1|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
+summary(m)
+confint(m, method="Wald")[6:13,]
+
+model_estimates_exp1_three_way <- m %>%
+  tidy(effects="fixed")
+```
+
+To explore whether the effect of condition depended on age, we fit a logistic mixed-effects model predicting the likelihood of making a correct choice from the three-way interaction between condition (centered; Active = 0.5; Passive = -0.5), block (unit centered), age (mean-centered), and all lower-order effects. The model included random intercepts for participant, target image, and yoked participant id, as well as a by-participant random slope for block.
+There was no evidence of a three-way interaction between condition, age, and block, p = `r model_estimates_exp1_three_way %>% filter(term=="condition_c:stim_set_c:age_c") %>% pull(p.value) %>% round(.,2)`.
+
+# Experiment S1 {.tabset}
+
+```{r}
+expS1_d <- d_post_exclusion %>%
+  filter(experiment == "expS1")
+
+subject_choice_active_expS1 <- subject_choice %>%
+  filter(version == "2A" & condition=="active")
+```
+
+## Sampling Phase {.tabset}
+
+### Sampling Choices
+
+Participants differentially selected words during the Sampling Phase depending on the number of occurrences of the word during the Exposure Phase. Children were more likely to sample items the less frequently they were labeled during the Exposure Phase.
+
+```{r}
+#choices by exposure type
+expS1_choice_data_frame <- expand.grid(
+  subject=unique(filter(expS1_d,trial_type=="learning")$subject),choice_kind=c("high","medium","low","no"),stim_set=c(1,2)) %>%
+  mutate(yoked_id = subject)
+expS1_choice_type <-  expS1_d %>%
+  filter(condition=="active"&trial_type=="learning") %>%
+  mutate(choice_kind=as.factor(choice_kind)) %>%
+  group_by(subject,yoked_id,stim_set, choice_kind,choice_image) %>%
+  summarize(choice_num=n())
+expS1_choice_type_complete <- expS1_choice_data_frame %>%
+  left_join(expS1_choice_type) %>%
+  mutate(choice_num=ifelse(is.na(choice_num),0,choice_num)) %>%
+  mutate(choice_prob = choice_num/3)
+
+expS1_summarize_choice_type <- summarySEwithin(
+  data=expS1_choice_type_complete,
+  measurevar="choice_num",
+  withinvars=c("choice_kind"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = choice_num - ci,
+    upper_ci = choice_num + ci)
+expS1_summarize_choice_type_block <- summarySEwithin(
+  data=expS1_choice_type_complete,
+  measurevar="choice_num",
+  withinvars=c("stim_set","choice_kind"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = choice_num - ci,
+    upper_ci = choice_num + ci) %>%
+  mutate(block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2"))
+
+#table
+expS1_summarize_choice_type %>%
+  select(-N,-ciMult,-choice_num_norm,-sd,-se,-ci) %>%
+  arrange(choice_num) %>%
+  kable()
+```
+
+```{r}
+#plot
+expS1_sampling_choices_plot <- ggplot(expS1_summarize_choice_type,aes(choice_kind,choice_num, color=choice_kind, fill=choice_kind))+
+  geom_bar(stat="identity",size=2,alpha=0.05)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),color="black",width=0.1)+
+  theme_classic()+
+  scale_x_discrete(labels=c("5 Exposures","2 Exposures","1 Exposure","0 Exposures"),limits=c("high","medium","low","no"))+
+  theme_classic()+
+  scale_color_viridis(discrete=T)+
+  scale_fill_viridis(discrete=T)+
+  xlab("Exposure Item")+
+  ylab("Average Sampling Choice Frequency")+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(size=13),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+expS1_sampling_choices_plot
+ggsave(here(figure_path,"expS1_sampling_choices_by_exposure.png"),width=9,height=6)
+```
+
+### Lower Exposure Choices {.tabset}
+
+#### Descriptives
+
+As in Experiment 2, children weighed the relative informativeness of their options. Participants preferentially selected words during the Sampling Phase that were heard less frequently during the Exposure Phase.
+
+```{r}
+#overall
+expS1_sum_subj_choices <- expS1_d %>%
+  filter(trial_type=="learning") %>%
+  group_by(subject,age,age_group,condition,choice_trial_type) %>%
+  summarize(
+    avg_lower_exposure_choice=mean(lower_exposure_choice))
+##by block
+expS1_sum_subj_choices_block <- expS1_d %>%
+  filter(trial_type=="learning") %>%
+  group_by(subject,age,age_group,condition,choice_trial_type,stim_set) %>%
+  summarize(
+    avg_lower_exposure_choice=mean(lower_exposure_choice))
+
+#overall
+expS1_overall_exposure_choices_subj <- expS1_sum_subj_choices %>%
+  group_by(subject,age,age_group,condition) %>%
+  summarize(mean_lower_exposure_choice=mean(avg_lower_exposure_choice))
+##by block
+expS1_overall_exposure_choices_subj_block <- expS1_sum_subj_choices_block %>%
+  group_by(subject,age,age_group,condition,stim_set) %>%
+  summarize(mean_lower_exposure_choice=mean(avg_lower_exposure_choice))
+
+## summarize
+#within-subject-corrected
+## by block
+expS1_overall_exposure_choices_within_corrected_block <- summarySEwithin(filter(expS1_overall_exposure_choices_subj_block, condition=="active"),"mean_lower_exposure_choice", betweenvars=c("condition"),withinvars=c("stim_set"),idvar="subject" ) %>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+#uncorrected (reported)
+expS1_overall_exposure_choices <- summarySE(filter(expS1_overall_exposure_choices_subj, condition=="active"),"mean_lower_exposure_choice", groupvars=c("condition"))%>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+## by block
+expS1_overall_exposure_choices_block <- summarySE(filter(expS1_overall_exposure_choices_subj_block, condition=="active"),"mean_lower_exposure_choice", groupvars=c("condition"))%>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+```
+
+##### Overall
+```{r}
+#t-tests
+#overall
+t.test(subset(expS1_overall_exposure_choices_subj, condition=="active")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+##### By Block
+
+###### Block 1
+
+```{r}
+#Block 1
+t.test(filter(expS1_overall_exposure_choices_subj_block, condition=="active"&stim_set==1)$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+###### Block 2
+
+```{r}
+#Block 2
+t.test(filter(expS1_overall_exposure_choices_subj_block, condition=="active"&stim_set==2)$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+#### Age Effects
+
+```{r}
+m <- lm(mean_lower_exposure_choice~ age,subset(expS1_overall_exposure_choices_subj, condition=="active"))
+summary(m)
+confint(m)
+
+model_estimates_exps1_age <- broom::tidy(m) %>%
+  mutate(df=m$df.residual)
+model_estimates_exps1_age$lower_ci <- confint(m)[,1]
+model_estimates_exps1_age$upper_ci <- confint(m)[,2]
+```
+
+We also fit a linear regression model predicting whether the proportion of lower exposure choices changed with age. Choosing the lower-exposure item did not significantly increase with age, b = 0.05, 95% Wald CI = [-0.01, 0.10], t(34) = 1.69, p = .10.
+b = `r model_estimates_exps1_age %>% filter(term=="age") %>% pull(estimate) %>% round(.,2)`, 95% Wald CI = [`r model_estimates_exps1_age %>% filter(term=="age") %>% pull(lower_ci) %>% round(.,2) %>% as.numeric()`, `r model_estimates_exps1_age %>% filter(term=="age") %>% pull(upper_ci) %>% round(.,2) %>% as.numeric()`], t(`r model_estimates_exps1_age %>% filter(term=="age") %>% pull(df) %>% round(.,0)`) = `r model_estimates_exps1_age %>% filter(term=="age") %>% pull(statistic) %>% round(.,2)`, p = `r model_estimates_exps1_age %>% filter(term=="age") %>% pull(p.value) %>% round(.,2)`.
+
+Below is a simple plot of the effect of age.
+
+```{r}
+ggplot(subset(expS1_overall_exposure_choices_subj, condition=="active"),
+       aes(age,mean_lower_exposure_choice))+
+  geom_hline(yintercept = 0.5,linetype="dashed")+
+  geom_point()+
+  geom_smooth(method="lm")+
+  xlab("Age (in years)")+
+  ylab("Proportion Lower Exposure Choices")
+ggsave(here(figure_path,"expS1_lower_exposure_choices_across_age.png"),width=9,height=6,bg = "white")
+```
+
+Below, we break down the preference for the lower exposure choice for each age group.
+
+##### 3-year-olds
+
+```{r}
+t.test(subset(expS1_overall_exposure_choices_subj, condition=="active"&age_group=="three-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+##### 4-year-olds
+
+```{r}
+t.test(subset(expS1_overall_exposure_choices_subj, condition=="active"&age_group=="four-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+##### 5-year-olds
+
+```{r}
+t.test(subset(expS1_overall_exposure_choices_subj, condition=="active"&age_group=="five-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+#### Robustness Check
+
+##### Robustness Check: Model-Based approach with logistic mixed-effects models.
+
+We obtain similar effects when fitting a trial-by-trial logistic mixed-effects model predicting whether participants choose the lower-exposure item.
+
+##### Overall
+
+```{r}
+#overall
+m <- glmer(lower_exposure_choice~1+(1|subject)+(1|available_image1)+(1|available_image2),data=subset(expS1_d,trial_type=="learning"), family=binomial)
+summary(m)
+```
+
+##### Block 1
+
+```{r}
+m <- glmer(lower_exposure_choice~1+(1|subject)+(1|available_image1)+(1|available_image2),data=subset(expS1_d,trial_type=="learning"&stim_set==1), family=binomial)
+summary(m)
+```
+
+##### Block 2
+
+```{r}
+#stimSet 2
+m <- glmer(lower_exposure_choice~1+(1|subject)+(1|available_image1)+(1|available_image2),data=subset(expS1_d,trial_type=="learning"&stim_set==2), family=binomial)
+summary(m)
+```
+
+##### Age
+
+Does the effect depend on age?
+
+```{r}
+#center age
+expS1_d <- expS1_d %>%
+  mutate(age_c = age - mean(age,na.rm=T))
+
+#overall
+## note: singular fit due to random intercept for available_image1 does not change estimate
+m <- glmer(lower_exposure_choice~age_c+(1|subject)+(1|available_image1)+(1|available_image2),data=subset(expS1_d,trial_type=="learning"), family=binomial)
+summary(m)
+```
+
+#### Plot
+
+```{r}
+#proportion choices for different choice pairs
+expS1_sum_choices <- expS1_sum_subj_choices %>%
+  group_by(condition,choice_trial_type) %>%
+  summarize(
+    N=n(),
+    lower_exposure_choice_prob=mean(avg_lower_exposure_choice),
+    sd_le = sd(avg_lower_exposure_choice,na.rm=TRUE),
+    ci = qt(0.975, N-1)*sd_le/sqrt(N),
+    lower_ci = lower_exposure_choice_prob - ci,
+    upper_ci = lower_exposure_choice_prob + ci,
+    ) %>%
+  mutate(
+    highest_freq = case_when(
+      choice_trial_type %in% c("high_low","high_no","high_medium") ~ "high",
+      choice_trial_type %in% c("low_medium","medium_no") ~ "medium",
+      choice_trial_type %in% c("low_no") ~ "low",
+      TRUE ~ NA_character_),
+    low_freq = case_when(
+      choice_trial_type %in% c("low_no","high_no","medium_no") ~ "no",
+      choice_trial_type %in% c("low_medium","high_low") ~ "low",
+      choice_trial_type %in% c("high_medium") ~ "medium",
+      TRUE ~ NA_character_)
+    ) %>%
+  mutate(
+    highest_freq_f = factor(highest_freq, levels=c("high","medium","low"), labels=c("5 Exposures","2 Exposures","1 Exposure"))
+  )
+##by block
+expS1_sum_choices_block <- expS1_sum_subj_choices_block %>%
+  group_by(condition,choice_trial_type,stim_set) %>%
+  summarize(
+    N=n(),
+    lower_exposure_choice_prob=mean(avg_lower_exposure_choice),
+    ci.lower=binom.test(sum(avg_lower_exposure_choice),N)$conf.int[1],
+    ci.upper=binom.test(sum(avg_lower_exposure_choice),N)$conf.int[2]) %>%
+  mutate(
+    highest_freq = case_when(
+      choice_trial_type %in% c("high_low","high_no","high_medium") ~ "high",
+      choice_trial_type %in% c("low_medium","medium_no") ~ "medium",
+      choice_trial_type %in% c("low_no") ~ "low",
+      TRUE ~ NA_character_),
+    low_freq = case_when(
+      choice_trial_type %in% c("low_no","high_no","medium_no") ~ "no",
+      choice_trial_type %in% c("low_medium","high_low") ~ "low",
+      choice_trial_type %in% c("high_medium") ~ "medium",
+      TRUE ~ NA_character_)
+    ) %>%
+  mutate(
+    highest_freq_f = factor(highest_freq, levels=c("high","medium","low"), labels=c("5 Exposures","2 Exposures","1 Exposure"))
+  ) %>%
+  mutate(
+    block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2")
+  )
+```
+
+##### Overall
+
+```{r}
+#plot
+expS1_sampling_pairs <- ggplot(subset(expS1_sum_choices,condition=="active"),aes(low_freq,lower_exposure_choice_prob,color=low_freq,fill=low_freq))+
+  geom_bar(stat="identity",size=2,,alpha=0.05)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2","1","0"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  #scale_color_viridis(discrete=T)+
+  scale_color_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  #scale_fill_viridis(discrete=T)+
+  scale_fill_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+expS1_sampling_pairs
+ggsave(here(figure_path,"expS1_sampling_lowerExposureChoices.png"),width=11,height=7)
+```
+
+##### Combined Sampling Choices and Exposure Pairs Figure
+
+```{r}
+# save in one combined plot (Figure S1)
+plot_grid(expS1_sampling_choices_plot,expS1_sampling_pairs, labels=c("A","B"))
+ggsave(here(figure_path,"expS1_sampling_all.png"),width=11,height=7)
+```
+
+##### By Block
+
+Here, we break down the lower exposure choice proportions by block.
+
+```{r}
+p1 <- ggplot(subset(expS1_sum_choices_block,condition=="active"&block=="BLOCK 1"),aes(low_freq,lower_exposure_choice_prob,color=highest_freq_f))+
+  geom_bar(stat="identity",size=2,fill="white")+
+  geom_errorbar(aes(ymin=ci.lower,ymax=ci.upper),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2 Exposures","1 Exposure","0 Exposures"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  scale_color_viridis(discrete=T)+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(angle=90,vjust=0.5,size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+
+p2 <- ggplot(subset(expS1_sum_choices_block,condition=="active"&block=="BLOCK 2"),aes(low_freq,lower_exposure_choice_prob,color=highest_freq_f))+
+  geom_bar(stat="identity",size=2,fill="white")+
+  geom_errorbar(aes(ymin=ci.lower,ymax=ci.upper),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2 Exposures","1 Exposure","0 Exposures"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  scale_color_viridis(discrete=T)+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(angle=90,vjust=0.5,size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+plot_grid(p1,p2, labels=c("A","B"))
+ggsave(here(figure_path,"expS1_sampling_lowerExposureChoices_by_block.png"),width=11,height=7)
+```
+
+### Informativeness Difference Analysis {.tabset}
+
+#### Model
+
+We also fit a logistic mixed-effects model predicting children’s likelihood of choosing a given item from its difference in informativeness to the alternative option (collapsing across blocks), including random intercepts for participant and for each of item option. Children’s likelihood of choosing an item increased as it became more informative relative to the alternative item presented on a given trial.
+
+```{r}
+#more complex model (resulted in a singular fit, so we pruned the random slope - results are robust across random effect specifications)
+#m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1+cur_exp_log_rel_freq_diff12|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"),family=binomial)
+m_inf_expS1 <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"),family=binomial)
+summary(m_inf_expS1)
+confint(m_inf_expS1, method="Wald")[4:5,]
+```
+
+##### Robustness: Interaction with Block
+
+The effect did not interact with block.
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12*stim_set_c+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:7,]
+```
+
+##### Robustness: Block 1 alone
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"&stim_set==1),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+##### Robustness: Block 2 alone
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"&stim_set==2),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+##### Robustness: Interaction with age
+
+The effect did not interact with age.
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12*age_c+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,trial_type=="learning"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:7,]
+```
+
+###### 3-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,condition=="active"&trial_type=="learning"&age_group=="three-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+###### 4-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,condition=="active"&trial_type=="learning"&age_group=="four-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+###### 5-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(expS1_d,condition=="active"&trial_type=="learning"&age_group=="five-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+#### Plot
+
+The plot depicts the likelihood of choosing an item (Image 1) as a function of the difference in informativeness to the alternative option (Image 2) in Experiment S1. The blue line represents the fit of the logistic mixed-effects model, with 95% confidence bands. Dots represent individual responses, with violin plots visualizing the distribution. 
+
+```{r}
+#create data frame to predict
+expS1_inf_pX <- data.frame(cur_exp_log_rel_freq_diff12=seq(min(expS1_d$cur_exp_log_rel_freq_diff12,na.rm=T),max(expS1_d$cur_exp_log_rel_freq_diff12,na.rm=T),by=0.1))
+expS1_inf_pY <- predictSE(m_inf_expS1,expS1_inf_pX,re.form=NA,type="response")
+expS1_inf_pX <- expS1_inf_pX %>%
+  mutate(
+    fit=expS1_inf_pY$fit,
+    se.fit=expS1_inf_pY$se.fit) %>%
+  mutate(
+    is_image1_choice = fit,
+    y_lower = fit-se.fit,
+    y_upper = fit+se.fit
+  )
+
+#create plot
+expS1_informativeness <- ggplot(expS1_inf_pX,aes(cur_exp_log_rel_freq_diff12,is_image1_choice))+
+  geom_vline(xintercept=0,linetype="solid")+
+  geom_violinh(data=filter(expS1_d,trial_type=="learning"),aes(y=is_image1_choice,group=is_image1_choice),scale="count",width=0.1, trim=T)+
+  geom_jitter(data=filter(expS1_d,trial_type=="learning"),aes(y=is_image1_choice,group=is_image1_choice),height=0.01)+
+  geom_smooth(aes(ymin=y_lower,ymax=y_upper),stat="identity")+
+  geom_hline(yintercept=0.5,linetype="dotted")+
+  coord_cartesian(xlim = c(-4,4), ylim = c(-0.05,1.05))+
+  scale_x_continuous(breaks=seq(-4,4,1))+
+  theme_classic(base_size=14)+
+  xlab("Informativeness Difference Image 1 - Image 2")+
+  ylab("Probability of Choosing Image 1")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))
+expS1_informativeness
+ggsave(here(figure_path,"expS1_informativeness_analysis.png"),width=9,height=6,bg="white")
+```
+
+## Test Phase {.tabset}
+
+### Overall Accuracy
+
+Children successfully learned the novel labels overall, achieving high accuracy in the Test Phase. Accuracy was similar in Block 1 and Block 2.
+
+```{r}
+expS1_test_subj <- expS1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,age,age_group,condition) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  )
+
+expS1_test_summarized <- expS1_test_subj %>%
+  group_by(condition) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+expS1_test_summarized %>%
+  select(-avg_accuracy_ci) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Condition", "N", "Average Accuracy","CI"),digits=3)
+
+expS1_test_subj_block <- expS1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,age,age_group,condition,stim_set) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  ) %>%
+  mutate(block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2"))
+
+expS1_test_summarized_block <- expS1_test_subj_block %>%
+  group_by(condition,stim_set, block) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+expS1_test_summarized_block %>%
+  ungroup() %>%
+  arrange(block) %>%
+  select(-avg_accuracy_ci,-stim_set) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(block,condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Block","Condition", "N", "Average Accuracy","CI"),digits=3)
+#just a quick t-test
+t.test(
+  filter(expS1_test_subj_block,stim_set==1)$mean_accuracy,
+  filter(expS1_test_subj_block,stim_set==2)$mean_accuracy,
+  paired=T)
+```
+
+### Age effect
+
+There was no change in test accuracy across age.
+
+```{r}
+### Main Model
+m <- glmer(is_right~age_c+(1|subject)+(1|target_image), subset(expS1_d, trial_type=="test"),family="binomial")
+summary(m)
+```
+
+Below is a plot of the age effect.
+
+```{r}
+ggplot(expS1_test_subj,
+       aes(age,mean_accuracy))+
+  geom_hline(yintercept = 0.5,linetype="dashed")+
+  geom_point()+
+  geom_smooth(method="lm")+
+  xlab("Age (in years)")+
+  ylab("Test Accuracy in Experiment S1")
+ggsave(here(figure_path,"expS1_test_accuracy_across_age.png"),width=9,height=6,bg = "white")
+```
+
+
+## Relationships between Exposure, Sampling, and Test {.tabset}
+
+```{r}
+#### combine test and choice data
+#test data
+expS1_subj_accuracy <-  expS1_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,yoked_id,age,age_group,condition,stim_set,target_kind, target_image) %>%
+  summarize(acc=mean(is_right),
+            mean_rt = mean(rt),
+            median_rt = median(rt))
+#choice data
+expS1_choice_kind_active <- expS1_d %>%
+  filter(condition=="active"&trial_type=="test") %>%
+  group_by(yoked_id,stim_set, target_kind, target_image) %>%
+  summarize(present=1) %>%
+  rename(
+    choice_kind=target_kind
+  )
+#combine
+expS1_choice_type_complete <- left_join(expS1_choice_kind_active,expS1_choice_type_complete) %>%
+  select(-choice_image,-present)
+
+#overall item-level
+expS1_test_choice_type <-left_join(expS1_subj_accuracy, expS1_choice_type_complete) %>%
+  mutate(
+    exposure_frequency = case_when(
+      target_kind=="high" ~5,
+      target_kind=="medium" ~ 2,
+      target_kind=="low" ~ 1,
+      target_kind=="no" ~ 0),
+    total_frequency = exposure_frequency + choice_num
+  )
+
+#trial-by-trial level
+expS1_test_d <- expS1_d %>%
+  filter(trial_type=="test") %>%
+  select(subject,trial_type,trial_num,yoked_id,age,age_group,condition,stim_set,target_kind, target_image,is_right)
+
+expS1_test_d_choice_type <-expS1_test_d %>%
+  left_join(expS1_choice_type_complete) %>%
+  mutate(
+    exposure_frequency = case_when(
+      target_kind=="high" ~5,
+      target_kind=="medium" ~ 2,
+      target_kind=="low" ~ 1,
+      target_kind=="no" ~ 0),
+    total_frequency = exposure_frequency + choice_num
+  ) %>%
+  mutate(
+    stim_set_c = ifelse(stim_set==1,-0.5,0.5),
+    stim_set_1 = ifelse(stim_set==1,0,1),
+    stim_set_2 = ifelse(stim_set==1,-1,0)
+  )
+```
+
+### Exposure and Sampling Frequency Predicting Test Accuracy
+
+We explored how children’s frequency of exposure during the Exposure Phase and the Sampling Phase predicted accuracy. We fit a logistic mixed-effects model predicting trial-by-trial test accuracy from Exposure Phase frequency and Sampling Phase frequency. We included the interaction between each of these predictors and experiment block (centered) as fixed effects, as well as random intercepts for participants and items. We did not find evidence that frequency during training was associated with test performance. 
+
+```{r}
+#exposure frequency and choices
+#check interaction with block
+m <- glmer(is_right ~(exposure_frequency+choice_num)*stim_set_c+(1|subject)+(1|target_image),data=expS1_test_d_choice_type,family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+confint(m, method="Wald")
+```
+
+#### Plot
+
+Below, we visualize the relationship between exposure frequency and test accuracy (plot 1) and sampling frequency and test accuracy (plot 2), split by block.
+
+```{r}
+#exposure frequency and test accuracy
+ggplot(expS1_test_d_choice_type,aes(exposure_frequency,is_right))+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)+
+  xlab("Exposure Phase Frequency")+
+  ylab("Test Accuracy")
+
+#sampling frequency and test accuracy
+ggplot(expS1_test_d_choice_type,aes(choice_num,is_right))+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)+
+  xlab("Sampling Phase Frequency")+
+  ylab("Test Accuracy")
+```
+
+#### Model Fit for each Block
+
+We also investigated the predictions of the model for each block by recentering the block predictor on Block 1 and Block 2, respectively. Higher sampling frequency was marginally associated with higher test accuracy specifically in the first experiment block, but otherwise there were no notable effects in Block 1 or in Block 2.
+
+Model results centered on Block 1:
+
+```{r}
+#block 1
+m <- glmer(is_right ~(exposure_frequency+choice_num)*stim_set_1+(1|subject)+(1|target_image),data=expS1_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+Model results centered on Block 2:
+
+```{r}
+#block 2
+m <- glmer(is_right ~(exposure_frequency+choice_num)*stim_set_2+(1|subject)+(1|target_image),data=expS1_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+### Total Frequency and Test Accuracy
+
+As in Experiment 2, we also explored whether the combined frequency of children’s exposure to each object-label association during the Exposure Phase and the Sampling Phase would predict their later test accuracy (not reported in supplement). As above, there was little evidence of a relationship between total frequency and test accuracy and no interaction with block.
+
+```{r}
+## total frequency
+#significant interaction with block
+m <- glmer(is_right ~total_frequency*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id),data=expS1_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+#### Model Fit for each Block
+
+There were also no notable effects for each block.
+
+Total Frequency model results centered on Block 1:
+
+```{r}
+#Block 1 alone
+m <- glmer(is_right ~total_frequency*stim_set_1+(1|subject)+(1|target_image)+(1|yoked_id),data=expS1_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+Total Frequency model results centered on Block 2:
+
+```{r}
+#Block 2 alone
+m <- glmer(is_right ~total_frequency*stim_set_2+(1|subject)+(1|target_image)+(1|yoked_id),data=expS1_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+
+# Experiment 2 {.tabset}
+
+```{r}
+exp2_d <- d_post_exclusion %>%
+  filter(experiment=="exp2")
+```
+
+## Sampling Phase {.tabset}
+
+### Sampling Choices
+
+Participants in the Active Condition selected items systematically during the Sampling Phase, depending on exposure frequency. On average, sampling choices scaled steadily with the frequency with which object-label items were heard during the Exposure Phase.
+
+```{r}
+#### first, create a data frame summarizing exposure frequencies for each subject
+#collect all unique image/ audio combinations
+exp2_images_data_frame <- exp2_d %>%
+  filter(trial_type=="exposure") %>%
+  select(yoked_id,subject,condition, stim_set,image1:image4,audio1:audio4) %>%
+  group_by(yoked_id,subject,condition, stim_set) %>%
+  pivot_longer(
+    cols = c(image1:image4,audio1:audio4),
+    names_to = c(".value","stim_num"),
+    names_pattern = "(image|audio)(\\d)"
+  ) %>%
+  distinct()
+#summarize frequencies during Exposure Phase
+exp2_exposure_frequencies <- exp2_d %>%
+  filter(trial_type=="exposure") %>%
+  select(yoked_id,subject,condition, stim_set,choice_image,choice_audio) %>%
+  group_by(yoked_id,subject,condition, stim_set,choice_image,choice_audio) %>%
+  summarize(
+    exposure_frequency = n()
+  ) %>%
+  rename(
+    image=choice_image,
+    audio=choice_audio
+  ) 
+#join and handle images with 0 occurrences
+exp2_exposure_data_frame <- exp2_images_data_frame %>%
+  left_join(exp2_exposure_frequencies) %>%
+  mutate(exposure_frequency=ifelse(is.na(exposure_frequency),0,exposure_frequency)) %>%
+  mutate(
+    exposure_kind = case_when(
+      exposure_frequency == 5 ~ "high",
+      exposure_frequency == 2 ~ "medium",
+      exposure_frequency == 1 ~ "low",
+      exposure_frequency == 0 ~ "no"
+    )
+  )
+
+#choices by exposure type
+exp2_choice_data_frame <- exp2_exposure_data_frame %>%
+  filter(condition=="active") %>%
+  select(-stim_num) %>%
+  rename(
+    choice_image=image,
+    choice_audio=audio,
+    choice_kind=exposure_kind
+  )
+exp2_choice_type <-  exp2_d %>%
+  filter(condition=="active" & trial_type=="learning") %>%
+  mutate(choice_kind=as.factor(choice_kind)) %>%
+  group_by(subject,yoked_id,stim_set, choice_kind,choice_image) %>%
+  summarize(choice_num=n())
+exp2_choice_type_complete <- exp2_choice_data_frame %>%
+  left_join(exp2_choice_type) %>%
+  mutate(choice_num=ifelse(is.na(choice_num),0,choice_num)) %>%
+  mutate(choice_prob = choice_num/3)
+
+#join in exposure and sampling
+exp2_choice_type_complete_for_join <- exp2_choice_type_complete %>%
+  ungroup() %>%
+  select(yoked_id,stim_set,choice_image,choice_audio,choice_kind,choice_num) %>%
+  rename(yoked_active_kind=choice_kind)
+exp2_exposure_sampling_complete <- exp2_exposure_data_frame %>%
+  rename(
+    choice_image=image,
+    choice_audio=audio
+  ) %>%
+  left_join(exp2_choice_type_complete_for_join) %>%
+  rename(
+    target_image = choice_image,
+    target_audio = choice_audio
+  ) %>%
+  #compute exposure difference
+  mutate(
+    yoked_active_exposure_frequency = case_when(
+      yoked_active_kind == "high" ~ 5,
+      yoked_active_kind == "medium" ~ 2,
+      yoked_active_kind == "low" ~ 1,
+      yoked_active_kind == "no" ~ 0
+    )
+  ) %>%
+  mutate(exposure_difference = exposure_frequency -yoked_active_exposure_frequency)
+  
+
+exp2_summarize_choice_type <- summarySEwithin(
+  data=exp2_choice_type_complete,
+  measurevar="choice_num",
+  withinvars=c("choice_kind"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = choice_num - ci,
+    upper_ci = choice_num + ci)
+exp2_summarize_choice_type_block <- summarySEwithin(
+  data=exp2_choice_type_complete,
+  measurevar="choice_num",
+  withinvars=c("stim_set","choice_kind"),
+  idvar="subject") %>%
+  mutate(
+    lower_ci = choice_num - ci,
+    upper_ci = choice_num + ci) %>%
+  mutate(block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2"))
+
+#table
+exp2_summarize_choice_type %>%
+  select(-N,-ciMult,-choice_num_norm,-sd,-se,-ci) %>%
+  arrange(choice_num) %>%
+  kable()
+```
+
+```{r}
+#plot
+#relevel choice kind
+exp2_summarize_choice_type$choice_kind <- factor(exp2_summarize_choice_type$choice_kind,levels = c("high","medium","low","no"))
+exp2_sampling_choices_plot <- ggplot(exp2_summarize_choice_type,aes(choice_kind,choice_num, color=choice_kind, fill=choice_kind))+
+  geom_bar(stat="identity",size=2,alpha=0.05)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),color="black",width=0.1)+
+  theme_classic()+
+  scale_x_discrete(labels=c("5 Exposures","2 Exposures","1 Exposure","0 Exposures"),limits=c("high","medium","low","no"))+
+  theme_classic()+
+  scale_color_viridis(discrete=T)+
+  scale_fill_viridis(discrete=T)+
+  xlab("Exposure Item")+
+  ylab("Average Sampling Choice Frequency")+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(size=13),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+exp2_sampling_choices_plot
+ggsave(here(figure_path,"exp2_sampling_choices_by_exposure.png"),width=9,height=6,bg="white")
+```
+
+### Lower Exposure Choices {.tabset}
+
+#### Descriptives
+
+Next, we asked whether children weighed the relative informativeness of their options in selecting between the two items on a given sampling trial. To investigate this question, we tested whether children preferentially selected the item with the lower frequency during the Exposure Phase on a given sampling trial (which always presented two options). Children preferentially selected the item with the lower frequency during the Exposure Phase.
+
+```{r}
+#overall
+exp2_sum_subj_choices <- exp2_d %>%
+  filter(condition=="active" &trial_type=="learning") %>%
+  group_by(subject,age_group,age,condition,choice_trial_type) %>%
+  summarize(
+    avg_lower_exposure_choice=mean(lower_exposure_choice))
+##by block
+exp2_sum_subj_choices_block <- exp2_d %>%
+  filter(condition=="active" &trial_type=="learning") %>%
+  group_by(subject,age_group,age,condition,choice_trial_type,stim_set) %>%
+  summarize(
+    avg_lower_exposure_choice=mean(lower_exposure_choice))
+
+#overall
+exp2_overall_exposure_choices_subj <- exp2_sum_subj_choices %>%
+  group_by(subject,age_group,age,condition) %>%
+  summarize(mean_lower_exposure_choice=mean(avg_lower_exposure_choice))
+##by block
+exp2_overall_exposure_choices_subj_block <- exp2_sum_subj_choices_block %>%
+  group_by(subject,age_group,age,condition,stim_set) %>%
+  summarize(mean_lower_exposure_choice=mean(avg_lower_exposure_choice))
+
+## summarize
+#within-subject-corrected
+## by block
+exp2_overall_exposure_choices_within_corrected_block <- summarySEwithin(filter(exp2_overall_exposure_choices_subj_block, condition=="active"),"mean_lower_exposure_choice", betweenvars=c("condition"),withinvars=c("stim_set"),idvar="subject" ) %>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+#uncorrected (reported)
+exp2_overall_exposure_choices <- summarySE(filter(exp2_overall_exposure_choices_subj, condition=="active"),"mean_lower_exposure_choice", groupvars=c("condition"))%>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+## by block
+exp2_overall_exposure_choices_block <- summarySE(filter(exp2_overall_exposure_choices_subj_block, condition=="active"),"mean_lower_exposure_choice", groupvars=c("condition","stim_set"))%>%
+  mutate(lower_ci = mean_lower_exposure_choice - ci,upper_ci = mean_lower_exposure_choice  + ci)
+```
+
+##### Overall
+
+```{r}
+#t-tests
+#overall
+t.test(subset(exp2_overall_exposure_choices_subj, condition=="active")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+
+##### By Block
+
+###### Block 1
+
+```{r}
+#Block 1
+t.test(filter(exp2_overall_exposure_choices_subj_block, condition=="active"&stim_set==1)$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+###### Block 2
+
+```{r}
+#Block 2
+t.test(filter(exp2_overall_exposure_choices_subj_block, condition=="active"&stim_set==2)$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+
+#### Age Effects
+
+```{r}
+m <- lm(mean_lower_exposure_choice~ age,subset(exp2_overall_exposure_choices_subj, condition=="active"))
+summary(m)
+
+model_estimates_exp2_age <- broom::tidy(m) %>%
+  mutate(df=m$df.residual)
+model_estimates_exp2_age$lower_ci <- confint(m)[,1]
+model_estimates_exp2_age$upper_ci <- confint(m)[,2]
+```
+
+We also investigated whether age (treated as a continuous variable) predicted children’s mean proportion of lower frequency items selected in simple linear regression model, finding that the proportion of lower frequency choices increased with age,
+b = `r model_estimates_exp2_age %>% filter(term=="age") %>% pull(estimate) %>% round(.,2)`, 95% Wald CI = [`r model_estimates_exp2_age %>% filter(term=="age") %>% pull(lower_ci) %>% round(.,2) %>% as.numeric()`, `r model_estimates_exp2_age %>% filter(term=="age") %>% pull(upper_ci) %>% round(.,2) %>% as.numeric()`], t(`r model_estimates_exp2_age %>% filter(term=="age") %>% pull(df) %>% round(.,0)`) = `r model_estimates_exp2_age %>% filter(term=="age") %>% pull(statistic) %>% round(.,2)`, p = `r model_estimates_exp2_age %>% filter(term=="age") %>% pull(p.value) %>% round(.,4)`.
+
+Below, we show a plot of this effect.
+
+```{r}
+ggplot(subset(exp2_overall_exposure_choices_subj, condition=="active"),
+       aes(age,mean_lower_exposure_choice))+
+  geom_hline(yintercept = 0.5,linetype="dashed")+
+  geom_point()+
+  geom_smooth(method="lm")+
+  xlab("Age (in years)")+
+  ylab("Proportion Lower Exposure Choices")
+ggsave(here(figure_path,"exp2_lower_exposure_choices_across_age.png"),width=9,height=6,bg = "white")
+```
+
+##### 3-year-olds
+
+```{r}
+t.test(subset(exp2_overall_exposure_choices_subj, condition=="active"&age_group=="three-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+##### 4-year-olds
+
+```{r}
+t.test(subset(exp2_overall_exposure_choices_subj, condition=="active"&age_group=="four-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+##### 5-year-olds
+
+```{r}
+t.test(subset(exp2_overall_exposure_choices_subj, condition=="active"&age_group=="five-year-olds")$mean_lower_exposure_choice,mu=0.5, var.equal=T)
+```
+
+#### Robustness Check
+
+##### Robustness Check: Model-Based approach with logistic mixed-effects models
+
+We obtain similar effects when fitting a trial-by-trial logistic mixed-effects model predicting whether participants choose the lower-exposure item.
+
+##### Overall
+
+```{r}
+#overall
+m <- glmer(lower_exposure_choice~1+(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"), family=binomial)
+summary(m)
+```
+
+##### Block 1
+
+```{r}
+m <- glmer(lower_exposure_choice~1+(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"&stim_set==1), family=binomial)
+summary(m)
+```
+
+##### Block 2
+
+```{r}
+#stimSet 2
+m <- glmer(lower_exposure_choice~1+(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"&stim_set==2), family=binomial)
+summary(m)
+```
+
+##### Age
+
+The age effect also holds in this logistic mixed-effects model.
+
+```{r}
+#center age
+exp2_d <- exp2_d %>%
+  mutate(age_c = age - mean(age,na.rm=T))
+
+#overall
+m <- glmer(lower_exposure_choice~age_c+(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"), family=binomial)
+summary(m)
+```
+
+##### Age Effect within each age group
+
+###### 3-year-olds
+
+```{r}
+m <- glmer(lower_exposure_choice~(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"& age_group=="three-year-olds"), family=binomial)
+summary(m)
+Anova(m,type="III")
+```
+
+###### 4-year-olds
+
+```{r}
+m <- glmer(lower_exposure_choice~(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"& age_group=="four-year-olds"), family=binomial)
+summary(m)
+Anova(m,type="III")
+```
+
+###### 5-year-olds
+
+```{r}
+m <- glmer(lower_exposure_choice~(1|available_image1)+(1|available_image2),data=subset(exp2_d,condition=="active" & trial_type=="learning"& age_group=="five-year-olds"), family=binomial)
+summary(m)
+Anova(m,type="III")
+```
+
+#### Plot
+
+```{r}
+#proportion choices for different choice pairs
+exp2_sum_choices <- exp2_sum_subj_choices %>%
+  group_by(condition,choice_trial_type) %>%
+  summarize(
+    N=n(),
+    lower_exposure_choice_prob=mean(avg_lower_exposure_choice),
+    sd_le = sd(avg_lower_exposure_choice,na.rm=TRUE),
+    ci = qt(0.975, N-1)*sd_le/sqrt(N),
+    lower_ci = lower_exposure_choice_prob - ci,
+    upper_ci = lower_exposure_choice_prob + ci,
+    ) %>%
+  mutate(
+    highest_freq = case_when(
+      choice_trial_type %in% c("high_low","high_no","high_medium") ~ "high",
+      choice_trial_type %in% c("low_medium","medium_no") ~ "medium",
+      choice_trial_type %in% c("low_no") ~ "low",
+      TRUE ~ NA_character_),
+    low_freq = case_when(
+      choice_trial_type %in% c("low_no","high_no","medium_no") ~ "no",
+      choice_trial_type %in% c("low_medium","high_low") ~ "low",
+      choice_trial_type %in% c("high_medium") ~ "medium",
+      TRUE ~ NA_character_)
+    ) %>%
+  mutate(
+    highest_freq_f = factor(highest_freq, levels=c("high","medium","low"), labels=c("5 Exposures","2 Exposures","1 Exposure"))
+  )
+##by block
+exp2_sum_choices_block <- exp2_sum_subj_choices_block %>%
+  group_by(condition,choice_trial_type,stim_set) %>%
+  summarize(
+    N=n(),
+    lower_exposure_choice_prob=mean(avg_lower_exposure_choice),
+    ci.lower=binom.test(sum(avg_lower_exposure_choice),N)$conf.int[1],
+    ci.upper=binom.test(sum(avg_lower_exposure_choice),N)$conf.int[2]) %>%
+  mutate(
+    highest_freq = case_when(
+      choice_trial_type %in% c("high_low","high_no","high_medium") ~ "high",
+      choice_trial_type %in% c("low_medium","medium_no") ~ "medium",
+      choice_trial_type %in% c("low_no") ~ "low",
+      TRUE ~ NA_character_),
+    low_freq = case_when(
+      choice_trial_type %in% c("low_no","high_no","medium_no") ~ "no",
+      choice_trial_type %in% c("low_medium","high_low") ~ "low",
+      choice_trial_type %in% c("high_medium") ~ "medium",
+      TRUE ~ NA_character_)
+    ) %>%
+  mutate(
+    highest_freq_f = factor(highest_freq, levels=c("high","medium","low"), labels=c("5 Exposures","2 Exposures","1 Exposure"))
+  ) %>%
+  mutate(
+    block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2")
+  )
+```
+
+##### Overall
+
+```{r}
+#plot
+exp2_sampling_pairs <- ggplot(subset(exp2_sum_choices,condition=="active"),aes(low_freq,lower_exposure_choice_prob,color=low_freq,fill=low_freq))+
+  geom_bar(stat="identity",size=2,,alpha=0.05)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2","1","0"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  #scale_color_viridis(discrete=T)+
+  scale_color_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  #scale_fill_viridis(discrete=T)+
+  scale_fill_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+exp2_sampling_pairs
+ggsave(here(figure_path,"exp2_sampling_lowerExposureChoices.png"),width=11,height=7,bg="white")
+```
+
+##### Combined Sampling Choices and Exposure Pairs Figure
+
+```{r}
+plot_grid(exp2_sampling_choices_plot,exp2_sampling_pairs, labels=c("A","B"))
+ggsave(here(figure_path,"exp2_sampling_all.png"),width=11,height=7,bg="white")
+```
+
+##### Split By Block
+
+```{r}
+p1 <- ggplot(subset(exp2_sum_choices_block,condition=="active"&block=="BLOCK 1"),aes(low_freq,lower_exposure_choice_prob,color=low_freq,fill=low_freq))+
+  geom_bar(stat="identity",size=2,fill="white")+
+  geom_errorbar(aes(ymin=ci.lower,ymax=ci.upper),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2 Exposures","1 Exposure","0 Exposures"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  #scale_color_viridis(discrete=T)+
+    scale_color_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  #scale_fill_viridis(discrete=T)+
+  scale_fill_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(angle=90,vjust=0.5,size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+
+p2 <- ggplot(subset(exp2_sum_choices_block,condition=="active"&block=="BLOCK 2"),aes(low_freq,lower_exposure_choice_prob,color=low_freq,fill=low_freq))+
+  geom_bar(stat="identity",size=2,fill="white")+
+  geom_errorbar(aes(ymin=ci.lower,ymax=ci.upper),width=0)+
+  theme_classic()+
+  scale_x_discrete(labels=c("2 Exposures","1 Exposure","0 Exposures"),limits=c("medium","low","no"))+
+  ylab("Lower Exposure Choice Probability")+
+  xlab("Lower Exposure Item")+
+  geom_hline(yintercept=.5,linetype="dotted")+
+  facet_wrap(~highest_freq_f)+
+  ylim(0,1)+
+  #scale_color_viridis(discrete=T)+
+    scale_color_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  #scale_fill_viridis(discrete=T)+
+  scale_fill_manual(limits = c("medium","low","no"),values=c("#31688EFF", "#35B779FF", "#FDE725FF"))+
+  theme(axis.title = element_text(size=20),
+        axis.text.x  = element_text(angle=90,vjust=0.5,size=16),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+plot_grid(p1,p2, labels=c("A","B"))
+ggsave(here(figure_path,"exp2_sampling_lowerExposureChoices_by_block.png"),width=11,height=7)
+```
+
+### Informativeness Difference Analysis {.tabset}
+
+To test whether children were sensitive to differences in informativeness between object-label associations, we fit a logistic mixed-effects model predicting children’s likelihood of choosing a given item from its difference in informativeness to the alternative option (collapsing across blocks). We included random intercepts for participant and for each item option. We found that children’s likelihood of choosing an item increased as it became more informative relative to the alternative item presented on a given trial.
+
+#### Model
+
+```{r}
+#more complex model (singular fit)
+#m=glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1+cur_exp_log_rel_freq_diff12|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active" & trial_type=="learning"),family=binomial)
+m_inf_exp2 <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active" &trial_type=="learning"),family=binomial)
+summary(m_inf_exp2)
+confint(m_inf_exp2, method="Wald")[4:5,]
+```
+
+Next, we conducted a series of robustness analyses to assess the sensitivity of the results.
+
+##### Robustness: Interaction with Block
+
+```{r}
+m=glmer(is_image1_choice~cur_exp_log_rel_freq_diff12*stim_set_c+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active" &trial_type=="learning"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:7,]
+```
+
+##### Robustness: Block 1 alone
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active" &trial_type=="learning"&stim_set==1),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+##### Robustness: Block 2 alone
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active" &trial_type=="learning"&stim_set==2),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+##### Interaction with age
+
+Consistent with the age effect found for sampling lower exposure frequency items, there was a significant interaction with age.
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12*age_c+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active"&trial_type=="learning"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:7,]
+```
+
+However, each age group showed a significant effect of informativeness when considered alone, suggesting that children sampled more informative object-label associations across the full age range, with the sampling choices of older children showing a stronger effect of informativeness.
+
+###### 3-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active"&trial_type=="learning"&age_group=="three-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+###### 4-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active"&trial_type=="learning"&age_group=="four-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+###### 5-year-olds
+
+```{r}
+m <- glmer(is_image1_choice~cur_exp_log_rel_freq_diff12+(1|subject)+(1|available_image1)+(1|available_image2),data=filter(exp2_d,condition=="active"&trial_type=="learning"&age_group=="five-year-olds"),glmerControl(optimizer="bobyqa"),family=binomial)
+summary(m)
+confint(m, method="Wald")[4:5,]
+```
+
+#### Plot
+
+```{r}
+#create data frame to predict
+exp2_inf_pX <- data.frame(cur_exp_log_rel_freq_diff12=seq(min(filter(exp2_d,condition=="active")$cur_exp_log_rel_freq_diff12,na.rm=T),max(filter(exp2_d,condition=="active")$cur_exp_log_rel_freq_diff12,na.rm=T),by=0.1))
+exp2_inf_pY <- predictSE(m_inf_exp2,exp2_inf_pX,re.form=NA,type="response")
+exp2_inf_pX <- exp2_inf_pX %>%
+  mutate(
+    fit=exp2_inf_pY$fit,
+    se.fit=exp2_inf_pY$se.fit) %>%
+  mutate(
+    is_image1_choice = fit,
+    y_lower = fit-se.fit,
+    y_upper = fit+se.fit
+  )
+
+#helper image data
+#image_data <- data.frame(x=c(-2,2),y=c(0.15,0.15),image_path = c(here("helper","informativeness_helper_fig_4_1.png"),here("helper","informativeness_helper_fig_1_4.png")))
+
+#create plot
+exp2_informativeness <- ggplot(exp2_inf_pX,aes(cur_exp_log_rel_freq_diff12,is_image1_choice))+
+  geom_vline(xintercept=0,linetype="solid")+
+  #geom_image(data=image_data,aes(x=x,y=y,image=image_path),size=0.2)+
+  geom_violinh(data=filter(exp2_d,condition=="active"&trial_type=="learning"),aes(y=is_image1_choice,group=is_image1_choice),scale="count",width=0.1, trim=T)+
+  geom_jitter(data=filter(exp2_d,condition=="active"&trial_type=="learning"),aes(y=is_image1_choice,group=is_image1_choice),height=0.01)+
+  geom_smooth(aes(ymin=y_lower,ymax=y_upper),stat="identity")+
+  geom_hline(yintercept=0.5,linetype="dotted")+
+  coord_cartesian(xlim = c(-4,4), ylim = c(-0.05,1.05))+
+  scale_x_continuous(breaks=seq(-4,4,1))+
+  theme_classic(base_size=14)+
+  xlab("Informativeness Difference Image 1 - Image 2")+
+  ylab("Probability of Choosing Image 1")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))
+exp2_informativeness
+ggsave(here(figure_path,"exp2_informativeness_analysis.png"),width=9,height=6,bg="white")
+```
+
+## Test Phase {.tabset}
+
+### Overall Accuracy
+
+```{r}
+exp2_test_subj <- exp2_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,condition,stim_set) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  ) %>%
+  mutate(block = ifelse(stim_set==1,"BLOCK 1","BLOCK 2"))
+
+exp2_test_summarized <- exp2_test_subj %>%
+  group_by(condition,stim_set, block) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+exp2_test_summarized %>%
+  ungroup() %>%
+  arrange(block) %>%
+  select(-avg_accuracy_ci,-stim_set) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(block,condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Block","Condition", "N", "Average Accuracy","CI"),digits=3)
+```
+
+### Main Model
+
+To test for differences in word learning across conditions, we fit a logistic mixed-effects model predicting participants’ trial-by-trial accuracy from condition (dummy coded), experiment block (centered; Block 1 = -0.5, Block 2 = 0.5), and their interaction. We included random intercepts for participants, items, and yoked pairings (i.e., observations from participants who were yoked together were treated as non-independent).
+
+```{r}
+#model 1 non-converging
+#m <- glmer(is_right~condition_c*stim_set_c+(1+stim_set_c|subject)+(1|target_image)+(1+stim_set_c|yoked_id), subset(exp2_d, trial_type=="test"),family="binomial")
+m <- glmer(is_right~condition*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp2_d, trial_type=="test"),family="binomial")
+summary(m)
+Anova(m,type="III")
+```
+
+We found a significant condition by experiment block interaction. To investigate the source of the interaction, we estimated the simple effects of condition for each block by re-centering experiment block within the logistic-mixed effects model [note that the sign for coefficient estimates below is flipped in the paper for clarity].
+
+#### Block 1
+
+```{r}
+m <- glmer(is_right~condition*stim_set1+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp2_d, trial_type=="test"),family="binomial")
+summary(m)
+Anova(m,type="III")
+confint(m, method="Wald")
+```
+
+#### Block 2
+
+```{r}
+exp2_d <- exp2_d %>%
+  mutate(
+    stim_set2 = ifelse(stim_set==1,-1,0)
+  )
+#remove yoked id due to non-convergence
+m <- glmer(is_right~condition*stim_set2+(1|subject)+(1|target_image), subset(exp2_d, trial_type=="test"),family="binomial")
+summary(m)
+Anova(m,type="III")
+confint(m, method="Wald")
+```
+
+### Three-way interaction with age
+
+To test for possible differences in the effect of active learning across age, we fit a logistic mixed-effects model predicting participants’ trial-by-trial accuracy from condition (dummy coded), block (centered), age (centered), and their interactions. We included random intercepts for participants, items and for yoked pairings (i.e., observations from participants who were yoked together were treated as non-independent).
+
+```{r}
+m <- glmer(is_right~condition*stim_set_c*age_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp2_d, trial_type=="test"),glmerControl(optimizer="bobyqa"),family="binomial")
+summary(m)
+Anova(m,type="III")
+```
+
+Plot the condition effect for each age group
+
+```{r}
+exp2_test_subj_block_age_group <- exp2_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,stim_set,condition,age_group) %>%
+  summarize(
+    mean_accuracy = mean(is_right,na.rm=TRUE)
+  ) %>%
+  mutate(
+    age_group_f = factor(age_group, levels=c("three-year-olds","four-year-olds","five-year-olds")))
+
+exp2_test_summarized_block_age_group <- exp2_test_subj_block_age_group %>%
+  group_by(condition,stim_set,age_group_f) %>%
+  summarize(
+    N=n(),
+    avg_accuracy = mean(mean_accuracy),
+    avg_accuracy_ci = qt(0.975, N-1)*sd(mean_accuracy,na.rm=TRUE)/sqrt(N),
+    avg_accuracy_lower_ci = avg_accuracy - avg_accuracy_ci,
+    avg_accuracy_upper_ci = avg_accuracy + avg_accuracy_ci,
+  )
+exp2_test_summarized_block_age_group %>%
+  ungroup() %>%
+  select(-avg_accuracy_ci) %>%
+  mutate(
+    ci = str_c("[",round(avg_accuracy_lower_ci,3),", ", round(avg_accuracy_upper_ci,3),"]")) %>%
+  select(stim_set,age_group_f,condition,N,avg_accuracy,ci) %>%
+  kable(col.names=c("Block","Age Group","Condition", "N", "Average Accuracy","CI"),digits=3)
+```
+
+```{r}
+ggplot(exp2_test_summarized_block_age_group,aes(condition,avg_accuracy,color=condition,fill=condition))+
+  geom_half_violin(data= exp2_test_subj,aes(y=mean_accuracy),position = position_nudge(x = -.1, y = 0), width=0.8,adjust=1.5,trim = T, alpha = .8,color=NA,side="l")+
+  geom_point(stat="identity",size=4,position = position_nudge(x = .2, y = 0))+
+  geom_errorbar(aes(ymin=avg_accuracy_lower_ci,ymax=avg_accuracy_upper_ci),width=0,position = position_nudge(x = .2, y = 0))+
+  geom_jitter(data= exp2_test_subj,aes(y=mean_accuracy),size=2,width=0.05,height=0.025,alpha=0.4,stroke=NA)+
+  #geom_beeswarm(data= exp2_test_subj,aes(y=mean_accuracy),cex=0.5,alpha=0.5)+
+  theme_cowplot()+
+  theme(legend.position="none")+
+  geom_hline(yintercept=0.5,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  ylim(-0.04,1.04)+
+  scale_x_discrete(
+    breaks=c("active","passive","passive_mismatched"),
+    labels=c("Active","Yoked\nPassive","Yoked\n Passive\n Mismatch"))+
+  ylab("Word Learning Accuracy")+
+  xlab("Condition")+
+  facet_wrap(~stim_set+age_group_f,ncol=3)
+ggsave(here(figure_path,"exp2_accuracy_by_age_group.png"),width=9,height=9,bg = "white")
+```
+
+### Plot
+
+```{r}
+ggplot(exp2_test_summarized,aes(condition,avg_accuracy,color=condition,fill=condition))+
+  geom_half_violin(data= exp2_test_subj,aes(y=mean_accuracy),position = position_nudge(x = -.1, y = 0), width=0.8,adjust=1.5,trim = T, alpha = .8,color=NA,side="l")+
+  geom_point(stat="identity",size=4,position = position_nudge(x = .2, y = 0))+
+  geom_errorbar(aes(ymin=avg_accuracy_lower_ci,ymax=avg_accuracy_upper_ci),width=0,position = position_nudge(x = .2, y = 0))+
+  geom_jitter(data= exp2_test_subj,aes(y=mean_accuracy),size=2,width=0.05,height=0.025,alpha=0.4,stroke=NA)+
+  #geom_beeswarm(data= exp2_test_subj,aes(y=mean_accuracy),cex=0.5,alpha=0.5)+
+  theme_cowplot()+
+  theme(legend.position="none")+
+  geom_hline(yintercept=0.5,linetype="dashed")+
+  theme(axis.title = element_text(size=20),
+        axis.text  = element_text(size=16))+
+  scale_color_brewer(palette="Set1")+
+  scale_fill_brewer(palette="Set1")+
+  ylim(-0.04,1.04)+
+  scale_x_discrete(
+    breaks=c("active","passive","passive_mismatched"),
+    labels=c("Active","Yoked\nPassive","Yoked\n Passive\n Mismatch"))+
+  ylab("Word Learning Accuracy")+
+  xlab("Condition")+
+  facet_grid(~block)
+ggsave(here(figure_path,"exp2_accuracy_by_block.png"),width=9,height=6,bg = "white")
+```
+
+## Relationships between Exposure, Sampling, and Test {.tabset}
+
+We conducted several exploratory analyses to investigate the nature of the relationship between participants’ training during the Exposure and Sampling Phases and their subsequent test accuracy.
+
+```{r}
+#### combine test and choice data
+exp2_subj_accuracy <-  exp2_d %>%
+  filter(trial_type=="test") %>%
+  group_by(subject,yoked_id,age,age_group,condition,stim_set,target_kind, target_image) %>%
+  summarize(acc=mean(is_right),
+            mean_rt = mean(rt),
+            median_rt = median(rt))
+
+#overall item-level
+exp2_test_choice_type <-left_join(exp2_subj_accuracy, exp2_exposure_sampling_complete) %>%
+  mutate(
+    total_frequency = exposure_frequency + choice_num
+  )
+
+#trial-by-trial level
+exp2_test_d <- exp2_d %>%
+  filter(trial_type=="test") %>%
+  select(subject,trial_type,trial_num,yoked_id,age,age_group,condition,stim_set,stim_set_c,stim_set1,stim_set2,target_kind, target_image,is_right)
+
+exp2_test_d_choice_type <-exp2_test_d %>%
+  left_join(exp2_exposure_sampling_complete) %>%
+  mutate(
+    total_frequency = exposure_frequency + choice_num
+  )
+```
+
+### Frequency of Experience and Test Accuracy {.tabset}
+
+Participants' frequency of experience during the Exposure and Sampling Phases predicted test accuracy.
+
+#### Overall Frequency and its Relationship to Test
+
+First, we asked whether the combined frequency of children’s exposure to each object-label association during the Exposure Phase and the Sampling Phase would predict their later test accuracy. We fit a logistic mixed-effects model predicting children’s trial-by-trial accuracy on a given item from the total frequency with which they experienced that item during the Exposure Phase and the Sampling Phase combined (total frequency), experiment block, and their interaction. We included random intercepts for participants, items, and yoked pairings. Overall, children were more accurate on items they experienced more frequently during training.
+
+```{r}
+## total frequency
+#significant interaction with block
+m <- glmer(is_right ~total_frequency*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id),data=exp2_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+Below is a quick plot visualizing this effect.
+
+```{r}
+#item-level
+# total frequency
+ggplot(exp2_test_d_choice_type,aes(total_frequency,is_right,color=condition))+
+  geom_beeswarm(aes(group=total_frequency), cex=0.02,alpha=0.5)+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)
+```
+
+There was a marginal interaction between total frequency and experiment block, driven by the fact that the total frequency effect was robust in Block 1 but not in Block 2.
+
+##### Block 1
+
+Results for the logistic mixed-effects model, recentered on Block 1 to estimate the Block 1 total frequency effect.
+
+```{r}
+#Block 1
+m <- glmer(is_right ~total_frequency*stim_set1+(1|subject)+(1|target_image)+(1|yoked_id),data=exp2_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+##### Block 2
+
+Results for the logistic mixed-effects model, recentered on Block 2 to estimate the Block 2 total frequency effect.
+
+```{r}
+#Block 2
+m <- glmer(is_right ~total_frequency*stim_set2+(1|subject)+(1|target_image)+(1|yoked_id),data=exp2_test_d_choice_type,family=binomial)
+summary(m)
+confint(m, method="Wald")
+```
+
+#### Exposure and Sampling Frequency and its Relationship to Test
+
+Next, we aimed to tease apart the specific effect of frequency within the Exposure Phase and frequency within the Sampling Phase on test accuracy. We fit a logistic mixed-effects model predicting trial-by-trial test accuracy from the interaction between Exposure Phase frequency and experiment block (centered), and the interaction between Sampling Phase frequency and experiment block, as well as all lower-order effects. We included random intercepts for participants, items, and yoked pairings. Both exposure frequency and sampling frequency predicted accuracy at test while controlling for each other. 
+
+```{r}
+#exposure frequency and choices
+#check interaction with block
+m <- glmer(is_right ~(exposure_frequency+choice_num)*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id),data=exp2_test_d_choice_type,family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+confint(m, method="Wald")
+#vif(m) #use this command to double-check variance inflation
+```
+
+Below are two quick plots visualizing these effects.
+
+```{r}
+#sampling choices
+ggplot(exp2_test_d_choice_type,aes(choice_num,is_right,color=condition))+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)
+
+#exposure frequency
+ggplot(exp2_test_d_choice_type,aes(exposure_frequency,is_right,color=condition))+
+  geom_smooth(method="lm")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)
+```
+
+#### Effects for Block 1 by Condition
+
+Given that we observed condition effects only in Block 1, we investigated the effects of exposure and sampling frequency specifically in Block 1 for each condition separately. The effect of exposure frequency was largely robust across each condition. However, sampling frequency only predicted test accuracy in the Active condition, not in either of the Yoked Passive conditions.
+
+```{r}
+#Block 1
+#active condition only
+m <- glmer(is_right ~exposure_frequency+choice_num+(1|subject)+(1|target_image),data=filter(exp2_test_d_choice_type,stim_set==1 & condition=="active"),family=binomial)
+summary(m)
+confint(m, method="Wald")
+
+coefs_active <- data.frame(
+  condition="Active",
+  N=summary(m)$ngrps[1],
+  predictor=row.names(summary(m)$coefficients),
+  beta=summary(m)$coefficients[,1],
+  se=summary(m)$coefficients[,2],
+  z=summary(m)$coefficients[,3],
+  p=summary(m)$coefficients[,4]
+)
+#passive mismatched condition only
+m <- glmer(is_right ~exposure_frequency+choice_num+(1|subject)+(1|target_image),data=filter(exp2_test_d_choice_type,stim_set==1 & condition=="passive_mismatched"),family=binomial)
+summary(m)
+confint(m, method="Wald")
+
+coefs_passive_mis <- data.frame(
+  condition="Yoked Passive\nMismatch",
+  N=summary(m)$ngrps[1],
+  predictor=row.names(summary(m)$coefficients),
+  beta=summary(m)$coefficients[,1],
+  se=summary(m)$coefficients[,2],
+  z=summary(m)$coefficients[,3],
+  p=summary(m)$coefficients[,4]
+)
+#passive condition
+m <- glmer(is_right ~exposure_frequency+choice_num+(1|subject)+(1|target_image),data=filter(exp2_test_d_choice_type,stim_set==1 & condition=="passive"),family=binomial)
+summary(m)
+confint(m, method="Wald")
+
+coefs_passive <- data.frame(
+  condition="Yoked Passive",
+  N=summary(m)$ngrps[1],
+  predictor=row.names(summary(m)$coefficients),
+  beta=summary(m)$coefficients[,1],
+  se=summary(m)$coefficients[,2],
+  z=summary(m)$coefficients[,3],
+  p=summary(m)$coefficients[,4]
+)
+
+#combine
+coefs <- bind_rows(coefs_active,coefs_passive_mis,coefs_passive) %>%
+  mutate(ci = qt(0.975, N-1)*se,
+         lower_ci = beta-ci,
+         upper_ci=beta+ci)
+coefs$predictor=factor(coefs$predictor,levels=c("(Intercept)","choice_num","exposure_frequency","Yoked Passive\nMismatch"))
+coefs$condition=factor(coefs$condition, levels=c("Active","Yoked Passive","Yoked Passive\nMismatch"))
+ggplot(filter(coefs, predictor %in% c("choice_num","exposure_frequency")),aes(predictor,beta, color=condition))+
+  geom_point(size=5)+
+  geom_errorbar(aes(ymin=lower_ci,ymax=upper_ci),width=0)+
+  geom_hline(yintercept=0, linetype="dashed")+
+  facet_wrap(~condition)+
+  coord_flip()+
+  scale_x_discrete(
+    breaks=c("exposure_frequency","choice_num"),
+    labels=c("Frequency\nExposure Phase","Frequency\nSampling Phase")
+  )+
+  ylab("Model Beta Coefficient")+
+  xlab("Predictor Variable")+
+  scale_color_brewer(palette="Set1")+
+  theme(axis.title = element_text(size=20),
+        axis.text.y=element_text(size=16),
+        strip.text=element_text(size=16),
+        legend.position="none")
+ggsave(here(figure_path,"predicting_test_accuracy_from_exposure_block1.png"),width=9,height=6)
+```
+
+##### Interaction with Condition
+
+Note that the pattern of effects across condition above should be interpreted with caution, given that we did not observe a significant interaction between exposure frequency and condition or sampling frequency and condition.
+
+```{r}
+#note no interaction
+#had to remove the by-item random intercept due to non-convergence
+m <- glmer(is_right ~(exposure_frequency+choice_num)*condition+(1|subject),data=filter(exp2_test_d_choice_type,stim_set==1),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+Anova(m,type="III")
+```
+
+### Exposure Difference Analysis
+
+Next, we sought to understand the relationship between the decrease in accuracy in the Yoked Passive Mismatch condition and the degree of mismatch in exposure frequency for yoked participants in the passive and active conditions. Here, we exploited variation across yoked participant pairs in the magnitude of difference between word learning experiences during the Exposure Phase due to our randomization procedure. Because the frequency of experiencing each object-label association was randomized in Yoked Passive Mismatch participants, yoked participant pairs had similar learning experiences relative to their Active yoked counterparts for some items during the Exposure Phase (similar frequencies of seeing each object-label association), and dramatically mismatched learning experiences for others (e.g., an active participant saw an object-label association five times that a yoked mismatch participant saw just once or never). On a learning-dependent account of why active control benefits word learning, a greater degree of mismatch in initial learning experience predicts a larger difference in word learning at test. Did participants in the Yoked Passive Mismatch condition perform better on items they had more exposure to than their yoked counterpart in the Active condition and worse on items they had less exposure to than their yoked counterpart?
+
+To investigate this question, we fit a logistic mixed-effects model predicting the trial-by-trial accuracy of participants in the Yoked Passive Mismatch condition from the difference in exposure frequency for a given item (exposure frequency in the Yoked Passive Mismatch condition – exposure frequency in the Active condition for a given yoked pair and item), experiment block (centered) and their interaction. We included random intercepts for participants and items. Accuracy in the Yoked Passive Mismatch condition increased with larger exposure frequencies relative to the Active condition.
+
+```{r}
+#interaction between exposure difference and block
+m <- glmer(is_right ~exposure_difference*stim_set_c+(1|subject)+(1|target_image),data=filter(exp2_test_d_choice_type, condition=="passive_mismatched"),family=binomial,glmerControl(optimizer="bobyqa"))
+summary(m)
+confint(m,method="Wald")
+
+#quick overview plot
+ggplot(filter(exp2_test_d_choice_type,condition=="passive_mismatched"),aes(exposure_difference,is_right))+
+  geom_beeswarm(aes(group=exposure_difference), cex=0.02,alpha=0.01)+
+  geom_smooth(method="loess")+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8,1), limits=c(-0.1,1.1))+
+  facet_wrap(~stim_set)
+```
+
+#### Robustness Analysis: Predicting item-level accuracy differences
+
+We also conducted a robustness analysis in which we investigated the difference in accuracy between yoked pairings in the Active and Yoked Passive Mismatch condition, depending on differences in exposure frequency.
+
+```{r}
+#"landscape" analysis comparing active vs. passive mismatched
+active <- exp2_test_d_choice_type %>%
+  filter(condition %in% c("active")) %>%
+  group_by(yoked_id,stim_set,yoked_active_kind,target_image,choice_num,exposure_frequency) %>%
+  dplyr::summarise(accuracy=mean(is_right)) %>%
+  rename(active_accuracy=accuracy, active_exposure_frequency=exposure_frequency)
+
+passive_m <- exp2_test_d_choice_type %>%
+  filter(condition %in% c("passive_mismatched")) %>%
+  group_by(yoked_id,stim_set,exposure_kind,yoked_active_kind,target_image,choice_num,exposure_frequency) %>%
+  dplyr::summarise(accuracy=mean(is_right))  %>%
+  rename(passive_m_accuracy=accuracy,passive_m_exposure_frequency=exposure_frequency)
+
+yoked_item_accuracy <- active %>%
+  full_join(passive_m) %>%
+  mutate(
+    accuracy_difference = active_accuracy - passive_m_accuracy,
+    exposure_diff_categorical = case_when(
+      active_exposure_frequency - passive_m_exposure_frequency == 0 ~ 0,
+      active_exposure_frequency - passive_m_exposure_frequency > 0 ~ 1,
+      active_exposure_frequency - passive_m_exposure_frequency < 0 ~ -1
+    ),
+    exposure_difference=active_exposure_frequency - passive_m_exposure_frequency) %>%
+  mutate(stim_set_c=stim_set-1.5)
+```
+
+To test whether exposure difference predicted item-level accuracy difference, we fit a linear mixed-effects model predicting difference in test accuracy from difference in exposure frequency for a given item, experiment block (centered), and their interaction, including random intercepts for yoked pairing and item. Exposure difference was marginally related to difference in accuracy.
+
+```{r}
+#interaction
+m <- lmer(accuracy_difference~exposure_difference*stim_set_c+(1|yoked_id)+(1|target_image),data=yoked_item_accuracy,control=lmerControl(optimizer="bobyqa"))
+summary(m)
+
+# quick plot
+ggplot(yoked_item_accuracy, aes(exposure_difference,accuracy_difference)) +
+  geom_jitter()+
+  geom_smooth(method="lm")
+```
+
+##### Fancier visualization of the robustness analysis
+
+The figure below shows item-specific differences in accuracy (Active – Passive) for yoked counterparts in the Active and Yoked Passive Mismatch Condition, depending on exposure frequency.
+
+```{r}
+#summarize across items
+#across blocks
+summarized_yoked_item_accuracy <- yoked_item_accuracy %>%
+  group_by(yoked_active_kind,exposure_kind) %>%
+  summarize(N=n(),avg_acc_diff=mean(accuracy_difference)) %>%
+  mutate(
+    yoked_active_kind_f = factor(yoked_active_kind, levels=c("no","low","medium","high"), labels=c("0 Exposures","1 Exposure","2 Exposures","5 Exposures")),
+    exposure_kind_f = factor(exposure_kind, levels=c("no","low","medium","high"), labels=c("0 Exposures","1 Exposure","2 Exposures","5 Exposures")))
+
+ggplot(summarized_yoked_item_accuracy, aes(yoked_active_kind_f,  exposure_kind_f)) +
+  geom_tile(aes(fill = avg_acc_diff),color="white",size=0.9)+
+  scale_fill_viridis(name="Accuracy Difference\n(Active-Passive)",option="B")+
+  xlab("Exposure Frequency in Active Condition")+
+  ylab("Exposure Frequency in corresponding\nYoked Passive Mismatch Condition")
+ggsave(here(figure_path,"active_vs_yoked_passive_accuracy_landscape_exposure_frequency.png"),width=9,height=6)
+```
+
+The x-axis corresponds to the frequency of exposure for a given item and participant in the Active condition. The y-axis corresponds the frequency of exposure for the corresponding item and yoked participant in the Yoked Passive Mismatch condition. The color fill represents the average difference in accuracy between the Active condition and the Yoked Passive Mismatch condition for a given item and yoked pairing. Darker colors represent a greater advantage for performance in the Yoked Passive Mismatch condition, and lighter/ yellower colors represent an advantage for performance in the Active condition. 
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+

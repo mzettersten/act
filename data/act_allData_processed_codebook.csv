@@ -7,55 +7,55 @@ push_image1,"On first introduction of the images, the first image ""uncovered""/
 push_image2,"On first introduction of the images, the second image ""uncovered""/ tapped by the participant"
 push_image3,"On first introduction of the images, the third image ""uncovered""/ tapped by the participant"
 push_image4,"On first introduction of the images, the fourth image ""uncovered""/ tapped by the participant"
-location_index1,Location of the image corresponding to image1
-location_index2,Location of the image corresponding to image2
-location_index3,Location of the image corresponding to image3
-location_index4,Location of the image corresponding to image4
+location_index1,"Location of the image corresponding to image1 (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
+location_index2,"Location of the image corresponding to image2 (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
+location_index3,"Location of the image corresponding to image3 (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
+location_index4,"Location of the image corresponding to image4 (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
 rt_push1,"Reaction time for when image1 was ""uncovered"" on first introduction"
 rt_push2,"Reaction time for when image2 was ""uncovered"" on first introduction"
 rt_push3,"Reaction time for when image3 was ""uncovered"" on first introduction"
 rt_push4,"Reaction time for when image4 was ""uncovered"" on first introduction"
-trial_num,
-trial_type,
-stim_set,
-trial_type_2,
-trial_index,
-time_elapsed,
-internal_node_id,
-subject_old,
-condition,
-audio1,
-audio2,
-audio3,
-audio4,
-rt,
-choice,
-choice_image,
-choice_audio,
-stimulus,
-button_pressed,
-target_location,
-foil_location,
-target_image,
-foil_image,
-test_audio,
-choice_location,
-choice_type,
-is_right,
-yoked_id,
-version,
-experiment,
-available_image1,
-available_image2,
-option1,
-option2,
-exposure_num,
-subject,
-condition_c,
-stim_set1,
-stim_set_c,
-subj_code,
-age,
+trial_num,trial index tracker (within phase type)
+trial_type,trial/ phase  type
+stim_set,which stimulus set is used for the given trial; therefore also an index for block (1 or 2)
+trial_type_2,trial/ phase type based on the specific plugin being used on the jsPsych plugin being used
+trial_index,running trial index based on the jsPsych plugin used (some trials consist of multiple plugins combined)
+time_elapsed,how much time has elapsed since the start of the experiment  (in milliseconds)
+internal_node_id,jsPsych column for tracking node structure between plugins
+subject_old,"subject code column, pre corrections applied in the data preprocessing (e.g. when subject code's are mistyped; preserved here to make it easier to track down possible inconsistencies)"
+condition,"experiment condition (active, passive, passive_mismatched)"
+audio1,label audio path for image1
+audio2,label audio path for image2
+audio3,label audio path for image3
+audio4,label audio path for image4
+rt,reaction time for the given trial (in ms)
+choice,index of the participant's choice on the given trial
+choice_image,file path of the image chosen by the participant
+choice_audio,file path of the audio chosen by the participant
+stimulus,"for some jsPsych plugins, the main stimulus presented (e.g., for trials presenting the ""twohands"" stimulus for children to place their hands on a laminated sheet on the table with outlines of two hands prior to the onset of the next trial phase) "
+button_pressed,"for some jsPsych plugins, the index of the button presented (e.g. for the ""two-hands"" trials intervening between trial phases)"
+target_location,"for test trials, the location of the target image (right/left)"
+foil_location,"for test trials, the location of the foil/distractor image (right/left)"
+target_image,"for test trials, the target image"
+foil_image,"for test trials, the foil/distractor image"
+test_audio,"for test trials, the audio file presented"
+choice_location,"for test trials, the location chosen by the participant"
+choice_type,"for test trials, whether the participant chose the target or the foil image"
+is_right,"for test trials, whether the participant's choice was correct (1) or incorrect (0)"
+yoked_id,the subject code for the participant the current participant is yoked to (passive condition) or (for practical processing reasons) the current participant's subject code
+version,original experiment version coding based on the temporal order of data collection (1 = experiment 1; 2A = experiment S1 (Active only); 2B = Experiment 2 Active and Yoked Passive Mismatch conditions; 2C = Experiment 2 Yoked Passive condition)
+experiment,experiment version as reported in the preprint
+available_image1,"for the Sampling Phase, the first image available"
+available_image2,"for the Sampling Phase, the second image available"
+option1,"for the Sampling Phase, the location index of the first available image (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
+option2,"for the Sampling Phase, the location index of the second available image (in clockwise order, 0: top left; 1: top right; 2: bottom right, 3: bottom left)"
+exposure_num,"index tracking the exposure list/ manipulation (frequencies assigned to each image index during the Exposure Phase; 4!=24 unique combinations of the 5,2,1,0 frequency distribution)"
+subject,"participant code, after corrections (for mistyped participant codes)"
+condition_c,"experiment condition, centered, contrast between active/passive only (-0.5: Yoked Passive/ Yoked Passive Mismatch, 0.5: Active)"
+stim_set1,"experiment block, centered on Block 1 (0: Block 1, 1: Block 2)"
+stim_set_c,"experiment block (or stimulus set), centered (-0.5: Block 1, 0.5: Block 2)"
+subj_code,participant code from the subject log sheet
+age,participant age (in years)
 l1,Child's first language
 l1percent,Parent-reported percent of time child hears L1
 l1hours,Parent-reported number of hours per day child hears L1
@@ -70,86 +70,86 @@ pilot,Is the participant a pilot participant? (Y/N)
 exclude,Should the participant be excluded? (Y/N)
 video,Whether the parents provided a video release (not relevant here since sessions were not recorded)
 data_file,Whether a data file is available for the participant (Y/N)
-experimenter,
-notes,
-l4,
-l4percent,
-l4hours,
-exp_version,
-exp,
-exclude_reason,
-gender,
-hispanic_latino_yn,
-ethnicity_race,
-languages_besides_english_yn,
-languages_besides_english,
-language_hours_per_day,
-language_percent,
-native_language_speakers,
-language_speakers,
-age_group,
-exclude_new,
-exclude_active_passive_comparison,
-exclusion_reason,
-exclusion_reason_notes,
-late_data_collection,
-choice1,
-choice2,
-choice3,
-choice4,
-choice1_num,
-choice2_num,
-choice3_num,
-choice4_num,
-total_choices,
-gini,
-entropy,
-max_choice,
-exposure_number,
-image1_sorted,
-image2_sorted,
-image3_sorted,
-image4_sorted,
-high_label_exposure,
-medium_label_exposure,
-low_label_exposure,
-no_label_exposure,
-image_option_type1,
-image_option_type2,
-choice_kind,
-target_kind,
-choice_trial_type,
-lower_exposure_choice,
-exp_more_frequent_choice,
-image1_exp_freq,
-image2_exp_freq,
-image1_exp_log_rel_freq,
-image2_exp_log_rel_freq,
-exp_log_rel_freq_diff,
-exp_log_rel_freq_diff_c,
-high_label_freq,
-medium_label_freq,
-low_label_freq,
-no_label_freq,
-object1_cur_freq,
-object2_cur_freq,
-high_cur_freq,
-medium_cur_freq,
-low_cur_freq,
-no_cur_freq,
-increment_high,
-increment_medium,
-increment_low,
-increment_no,
-add_high,
-add_medium,
-add_low,
-add_no,
-image1_cur_exp_freq,
-image2_cur_exp_freq,
-cur_active_trial_num,
-image1_cur_exp_log_rel_freq,
-image2_cur_exp_log_rel_freq,
-cur_exp_log_rel_freq_diff,
-cur_exp_log_rel_freq_diff12,
-is_image1_choice,
+experimenter,the experimenter initials
+notes,experimenter notes on the session
+l4,Child's fourth language
+l4percent,Parent-reported percent of time child hears L4
+l4hours,Parent-reported number of hours per day child hears L4
+exp_version,Variable tracking the version of the experiment used (used when collecting the remaining data for Experiment 2)
+exp,"Variable tracking the version of the experiment used (used when collecting the remaining data for Experiment 2, also including some Active participants)"
+exclude_reason,description of reason participant was excluded
+gender,parent-reported participant gender (male/ female)
+hispanic_latino_yn,Whether parents reported the child as being Hispanic or Latino (Yes/No)
+ethnicity_race,parents-reported participant race/ethnicity
+languages_besides_english_yn,Does the child know languages besides English (Yes/No)
+languages_besides_english,Languages the child knows/ hears besides English (open text field)
+language_hours_per_day,Hours per day the child hears each language
+language_percent,Percent of time per day the child hears each language
+native_language_speakers,Whether the child hears the languages (besides English) from native language speakers
+language_speakers,Who the child hears the languages besides English from
+age_group,the age group of the child (three-year-olds/four-year-olds/five-year-olds)
+exclude_new,"final exclusion coding (y=exclude, n=do not exclude)"
+exclude_active_passive_comparison,exclude from active/ passive test comparisons
+exclusion_reason,more fine-grained classification of reason participant was excluded (compared to exclude_reason)
+exclusion_reason_notes,notes on exclusion classification
+late_data_collection,whether the participant was collected later in the data collection process for Experiment 2 (to fill out missing cells in the yoked matching process)
+choice1,"on Sampling trials, whether participants chose image1"
+choice2,"on Sampling trials, whether participants chose image2"
+choice3,"on Sampling trials, whether participants chose image3"
+choice4,"on Sampling trials, whether participants chose image4"
+choice1_num,number of times participants chose image1 during Sampling
+choice2_num,number of times participants chose image2 during Sampling
+choice3_num,number of times participants chose image3 during Sampling
+choice4_num,number of times participants chose image4 during Sampling
+total_choices,total number of choices during the Sampling Phase (used during code validation)
+gini,Gini coefficient of total sampling choices across the four options
+entropy,entropy of sampling choices across the four oiptions (alternate operationalization)
+max_choice,maximum number of choices per option
+exposure_number,"index tracking the exposure list/ manipulation (frequencies assigned to each image index during the Exposure Phase; 4!=24 unique combinations of the 5,2,1,0 frequency distribution)"
+image1_sorted,"in Experiment S1 and 2, first image in the Exposure Phase"
+image2_sorted,"in Experiment S1 and 2, second image in the Exposure Phase"
+image3_sorted,"in Experiment S1 and 2, third image in the Exposure Phase"
+image4_sorted,"in Experiment S1 and 2, in Experiment 2, fourth image in the Exposure Phase"
+high_label_exposure,"in Experiment S1 and 2, the image with high exposure frequency (5 labeling events)"
+medium_label_exposure,"in Experiment S1 and 2, the image with medium exposure frequency (2 labeling events)"
+low_label_exposure,"in Experiment S1 and 2, the image with low exposure frequency (1 labeling event)"
+no_label_exposure,"in Experiment S1 and 2, the image with no exposure frequency (0 labeling events)"
+image_option_type1,"in Experiment S1 and 2, the exposure frequency type of image option 1 during Sampling trials (high/medium/low/no)"
+image_option_type2,"in Experiment S1 and 2, the exposure frequency type of image option 2 during Sampling trials (high/medium/low/no)"
+choice_kind,"in Experiment S1 and 2, the exposure frequency type of participant's sampling choice or test choice (high/medium/low/no)"
+target_kind,"in Experiment S1 and 2, the exposure frequency type of the target item on Test trials (high/medium/low/no)"
+choice_trial_type,"in Experiment S1 and 2, the sampling trial type based on the exposure frequency types of the two image options (e.g., ""high_medium"" indicates that one of the sampling options is a high exposure item and the other is a medium exposure item)"
+lower_exposure_choice,whether participants sampled the lower exposure type of their two options (TRUE/FALSE)
+exp_more_frequent_choice,whether participant sampled the more frequent choice based on the Exposure Phase
+image1_exp_freq,"on Sampling trials, the exposure frequency of image1 (5/2/1/0)"
+image2_exp_freq,"on Sampling trials, the exposure frequency of image2 (5/2/1/0)"
+image1_exp_log_rel_freq,"for image1, negative log2 of exposure frequency divided by the number of exposure trials (8); 0 exposure images are recoded as 1/16 (half of the smallest non-negative exposure)"
+image2_exp_log_rel_freq,"for image2, negative log2 of exposure frequency divided by the number of exposure trials (8); 0 exposure images are recoded as 1/16 (half of the smallest non-negative exposure)"
+exp_log_rel_freq_diff,absolute difference between image1 and image2 negative log exposure frequency percentage
+exp_log_rel_freq_diff_c,absolute difference between image1 and image2 negative log exposure frequency percentage (centered)
+high_label_freq,exposure frequency of the high exposure item (5)
+medium_label_freq,exposure frequency of the medium exposure item (2)
+low_label_freq,exposure frequency of the low exposure item (1)
+no_label_freq,exposure frequency of the no exposure item (0)
+object1_cur_freq,current combined exposure and sampling frequency of the first sampling object option (updated based on sampling choices)
+object2_cur_freq,current combined exposure and sampling frequency of the second sampling object option (updated based on sampling choices)
+high_cur_freq,current combined exposure and sampling frequency of the high exposure frequency option (updated based on sampling choices)
+medium_cur_freq,current combined exposure and sampling frequency of the medium exposure frequency option (updated based on sampling choices)
+low_cur_freq,current combined exposure and sampling frequency of the low exposure frequency option (updated based on sampling choices)
+no_cur_freq,current combined exposure and sampling frequency of the no exposure frequency option (updated based on sampling choices)
+increment_high,whether to increment the current frequency of the high exposure frequency option prior to the next sampling trial (based on the sampling choice)
+increment_medium,whether to increment the current frequency of the medium exposure frequency option prior to the next sampling trial (based on the sampling choice)
+increment_low,whether to increment the current frequency of the low exposure frequency option prior to the next sampling trial (based on the sampling choice)
+increment_no,whether to increment the current frequency of the no exposure frequency option prior to the next sampling trial (based on the sampling choice)
+add_high,whether to add one to the current frequency of the high exposure frequency option (based on the previous sampling choice)
+add_medium,whether to add one to the current frequency of the medium exposure frequency option (based on the previous sampling choice)
+add_low,whether to add one to the current frequency of the low exposure frequency option (based on the previous sampling choice)
+add_no,whether to add one to the current frequency of the no exposure frequency option (based on the previous sampling choice)
+image1_cur_exp_freq,"on Sampling trials, the current combined exposure and sampling frequency of image1"
+image2_cur_exp_freq,"on Sampling trials, the current combined exposure and sampling frequency of image2"
+cur_active_trial_num,the trial number of the current sampling block
+image1_cur_exp_log_rel_freq,"for image1, negative log2 of combined exposure and sampling frequency divided by the number of exposure+sampling trials to this point; 0 exposure images are recoded half of the smallest possible non-negative exposure"
+image2_cur_exp_log_rel_freq,"for image2, negative log2 of combined exposure and sampling frequency divided by the number of exposure+sampling trials to this point; 0 exposure images are recoded half of the smallest possible non-negative exposure"
+cur_exp_log_rel_freq_diff,absolute difference between image1 and image2 negative log combined exposure and sampling frequency percentage
+cur_exp_log_rel_freq_diff12,difference between image1 and image2 negative log combined exposure and sampling frequency percentage
+is_image1_choice,"on Sampling trials, whether participants chose image1 "

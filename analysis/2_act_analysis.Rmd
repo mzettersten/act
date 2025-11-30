@@ -44,9 +44,7 @@ theme_set(theme_cowplot())
 
 Analysis walkthrough for the paper “Active sampling helps children learn new words by tuning their curriculum to past experiences” (authors removed, 2025).
 
-# Preparing the data
-
-## Read in data
+# Preparing the data {.tabset}
 
 We first set up the paths to relevant data files and read in the data.
 
@@ -154,13 +152,13 @@ yoked_matching_table %>%
 #we decided that this is within an acceptable margin, so exclusion is not merited
 ```
 
-# Demographics {.tabset}
+# Demographics 
 
 An overview of demographic information for the final sample, after exclusions. The descriptives are summarized overall, for Experiment 1 and 2 only (i.e., the full sample in the main manuscript), and broken down by each experiment
 
-## Age, Gender
+## Age, Gender {.tabset}
 
-### Overall
+### Overall 
 
 ```{r, message=F, warning=F}
 ####summarize demographics####
@@ -219,7 +217,7 @@ participant_demographics_by_exp <-  participant_info_post_exclusions %>%
 kable(participant_demographics_by_exp)
 ```
 
-## Race, Ethnicity
+## Race, Ethnicity {.tabset}
 
 ### Overall
 

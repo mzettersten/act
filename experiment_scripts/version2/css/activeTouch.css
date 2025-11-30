@@ -8,11 +8,11 @@ body {
   overflow: hidden;
 }
 
-#jspsych-button-response-btngroup {
+/* #jspsych-button-response-btngroup {
 	position: absolute;
 	top: 400px;
 	left: 600px;
-}
+} */
 
 #jspsych-active-learning-canvas {
   margin: auto;

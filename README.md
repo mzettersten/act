@@ -2,7 +2,7 @@
 
 Materials, data, and analysis scripts for experiments investigating active sampling during word learning in children ("Act").
 
-Zettersten, M., Choi, K., Kirkorian, H., & Saffran, J. (2025). Active sampling helps children learn new words by tuning their curriculum to past experiences. Preprint: 
+Zettersten, M., Choi, K., Kirkorian, H., & Saffran, J. (2025). Active sampling helps children learn new words by tuning their curriculum to past experiences. Preprint: https://osf.io/preprints/psyarxiv/ne43k_v1
 
 **Abstract**
 

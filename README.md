@@ -12,8 +12,8 @@ Young children are actively engaged in structuring their early language learning
 
 The repository contains the following documents:
 
-- **data**: experimental data and codebook
 - **analysis**: R scripts analyzing the data
+- **data**: experimental data and codebook
 - **experiment_scripts:** Experimental scripts used to present the experiment (JavaScript/html using jsPsych)
 - **figures:** Figures created in analyses
 - **presentations:** Files from past presentations

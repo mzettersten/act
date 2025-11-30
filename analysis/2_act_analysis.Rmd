@@ -365,11 +365,12 @@ exp1_test_summarized %>%
 ### Main Model
 
 ```{r}
-#### TODO check model convergence here ####
+##maximal model does not converge, fitting simplified random effects structure below
 #m <- glmer(is_right~condition_c*stim_set_c+(1+stim_set_c|subject)+(1+stim_set_c*condition_c|target_image)+(1+stim_set_c*condition_c|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
 #final model
 m <- glmer(is_right~condition_c*stim_set_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
 summary(m)
+confint(m, method="Wald")
 
 #extract coefficients from model
 #get parameter estimates
@@ -466,7 +467,7 @@ ggsave(here(figure_path,"exp1_accuracy_by_block.png"),width=9,height=6,bg = "whi
 exp1_d <- exp1_d %>%
   mutate(age_c = age - mean(age,na.rm=T))
 
-#### TODO check model convergence here ####
+## maximal model does not converge - fitting model with simpler random effects structure below
 #m <- glmer(is_right~condition*stim_set_c+(1+stim_set_c*condition_c|subject)+(1+stim_set_c*condition_c|target_image)+(1+stim_set_c*condition_c|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
 m <- glmer(is_right~condition_c*age_c+(1|subject)+(1|target_image)+(1|yoked_id), subset(exp1_d, trial_type=="test"),family="binomial")
 summary(m)
